@@ -2106,7 +2106,8 @@ function renderPositions() {
     if(isHL(p.broker)){hlCost+=p.totalCostGBP;return;}
     const lp=livePrices[p.asset];
     if(lp?.price){
-      const mv=p.class==='Crypto'?p.totalQty*lp.price*usdgbp:p.totalQty*lp.price*usdgbp;
+      const isGBPprice=lp.currency==='GBP';
+      const mv=p.class==='Crypto'?p.totalQty*lp.price*usdgbp:isGBPprice?p.totalQty*lp.price:p.totalQty*lp.price*usdgbp;
       totalMarket+=mv;posWithPrice++;
     }
   });
@@ -2143,12 +2144,13 @@ function renderPositions() {
     const lp=livePrices[p.asset];
     const isIBKR=p.broker==='IBKR';
     let livePriceCell='—',marketValCell='—',unrealCell='—';
-    if(lp&&lp.price&&isIBKR){
-      const marketVal=p.totalQty*lp.price;
-      const unrealPnl=marketVal-p.totalCostGBP;
-      livePriceCell=`<span class="mono">$${lp.price.toFixed(2)}</span>`;
-      marketValCell=`<span class="mono">${gbp(marketVal*livePrices['__USDGBP__']||marketVal*0.79)}</span>`;
-      unrealCell=`<span class="mono ${unrealPnl>=0?'pos':'neg'}">${unrealPnl>=0?'+':''}${gbp((unrealPnl)*(livePrices['__USDGBP__']||0.79))}</span>`;
+    if(lp&&lp.price&&(p.broker==='IBKR'||p.class==='Stock/ETF')){
+      const isGBPprice = lp.currency==='GBP';
+      const marketValGBP = isGBPprice ? p.totalQty*lp.price : p.totalQty*lp.price*usdgbp;
+      const unrealPnl=marketValGBP-p.totalCostGBP;
+      livePriceCell=isGBPprice?`<span class="mono">£${lp.price.toFixed(2)}</span>`:`<span class="mono">$${lp.price.toFixed(2)}</span>`;
+      marketValCell=`<span class="mono">${gbp(marketValGBP)}</span>`;
+      unrealCell=`<span class="mono ${unrealPnl>=0?'pos':'neg'}">${unrealPnl>=0?'+':''}${gbp(unrealPnl)}</span>`;
     } else if(lp&&lp.price&&p.class==='Crypto'){
       const marketVal=p.totalQty*lp.price*(livePrices['__USDGBP__']||0.79);
       const unrealPnl=marketVal-p.totalCostGBP;
@@ -2915,7 +2917,6 @@ async function refreshLivePrices() {
   if(status) status.textContent='Fetching prices...';
 
   const pos=getPositions();
-  const ibkrTickers=pos.filter(p=>p.broker==='IBKR').map(p=>p.asset);
   const cryptoTickers=pos.filter(p=>p.class==='Crypto').map(p=>p.asset.toLowerCase());
 
   // Get live USD/GBP rate first
@@ -2927,18 +2928,66 @@ async function refreshLivePrices() {
 
   let fetched=0;
 
-  // Fetch IBKR stock prices via Yahoo Finance
-  for(const ticker of ibkrTickers) {
+  const TWELVE_DATA_KEY = 'f6a53700d8c9439a86c3728a4822c862';
+
+  // HL full name → LSE ticker mapping
+  const hlNameToTicker = {
+    'iShares Physical Metals plc Physical Gold ETC': 'SGLN',
+    'iShares Physical Metals plc Physical Silver ETC': 'SSLN',
+    'iShares Physical Metals plc Physical Platinum ETC': 'SPLT',
+    'iShares Physical Metals plc Physical Palladium ETC': 'SPDM',
+    'iShares II plc Global Clean Energy UCITS ETF (Dist)': 'INRG',
+    'Global X ETFs Silver Miners UCITS ETF USD Acc (GBP)': 'SILV',
+    'Invesco Physical Markets plc Physical Platinum ETC (GBP)': 'IPLT',
+    'Invesco Physical Markets plc Physical Palladium ETC (GBP)': 'IPAL',
+    'HANetf ICAV Future of European Defence UCITS ETF USD Acc': 'DEFN',
+    'Vanguard Funds Plc S&P 500 UCITS ETF USD ACC (GBP)': 'VUSA',
+    'Vanguard Funds Plc Global Aggreg Bond UCITS ETF GBP H Acc': 'VAGP',
+    'ARK Innovation UCITS ETF Class A USD Acc': 'ARKG',
+    'BP Plc Ordinary US$0.25': 'BP',
+    'Shell plc Ordinary EUR0.07': 'SHEL',
+    'Rio Tinto plc Ordinary 10p': 'RIO',
+    'Babcock International Group Ordinary 60p': 'BAB',
+    'Oxford Biomedica plc Ordinary 50p': 'OXB',
+  };
+
+  // Fetch stock prices via Twelve Data (IBKR + HL)
+  const stockPositions = pos.filter(p => p.class === 'Stock/ETF');
+  if(stockPositions.length) {
+    // Build ticker list — HL uses name mapping, IBKR uses asset ticker directly
+  const stockTickerMap = {}; // asset → {ticker, posAsset}
+  stockPositions.forEach(p => {
+    const broker = normBroker(p.broker);
+    let ticker;
+    if(isHL(broker)) {
+      const lseTicker = hlNameToTicker[p.asset];
+      ticker = lseTicker ? `${lseTicker}.L` : null;
+      if(lseTicker) stockTickerMap[`${lseTicker}.L`] = {asset: p.asset, currency:'GBP'};
+    } else {
+      ticker = p.asset;
+      stockTickerMap[p.asset] = {asset: p.asset, currency:'USD'};
+    }
+  });
+  const uniqueTickers = [...new Set(Object.keys(stockTickerMap))].filter(Boolean);
+  if(uniqueTickers.length) {
+    const symbol = uniqueTickers.join(',');
     try {
-      const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`);
-      if(res.ok){
-        const d=await res.json();
-        const price=d?.chart?.result?.[0]?.meta?.regularMarketPrice;
-        if(price){livePrices[ticker]={price,source:'yahoo'};fetched++;}
+      const res = await fetch(`https://api.twelvedata.com/price?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`);
+      if(res.ok) {
+        const d = await res.json();
+        uniqueTickers.forEach(ticker => {
+          const info = stockTickerMap[ticker];
+          if(!info) return;
+          const priceData = uniqueTickers.length === 1 ? d : d[ticker];
+          if(priceData?.price && !priceData.code) {
+            livePrices[info.asset] = {price: parseFloat(priceData.price), source:'twelvedata', currency: info.currency};
+            fetched++;
+          }
+        });
       }
-    } catch(e){}
-    await new Promise(r=>setTimeout(r,200));
-  }
+    } catch(e) {}
+  } // end if(uniqueTickers.length)
+  } // end if(stockPositions.length)
 
   // Fetch crypto prices via CoinGecko
   if(cryptoTickers.length) {
