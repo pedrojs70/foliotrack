@@ -1,0 +1,2475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FolioTrack</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<style>
+:root {
+  --bg:#0a0d0f;--bg2:#111418;--bg3:#181c21;--bg4:#1e232a;--bg5:#252b33;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --text:#e8eaed;--text2:#8a9099;--text3:#555c66;
+  --accent:#00d4aa;--accent2:#00b891;--accent-dim:rgba(0,212,170,0.1);--accent-dim2:rgba(0,212,170,0.05);
+  --red:#ff4d6a;--red-dim:rgba(255,77,106,0.12);
+  --green:#00d4aa;--green-dim:rgba(0,212,170,0.12);
+  --amber:#f5a623;--amber-dim:rgba(245,166,35,0.12);
+  --blue:#4d9fff;--blue-dim:rgba(77,159,255,0.12);
+  --purple:#a78bfa;--purple-dim:rgba(167,139,250,0.12);
+  --radius:10px;--radius-lg:14px;
+  --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;min-height:100vh;overflow-x:hidden;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+
+.app{display:flex;height:100vh;overflow:hidden;}
+
+/* SIDEBAR */
+.sidebar{width:228px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 0;}
+.logo{padding:0 18px 20px;display:flex;align-items:center;gap:10px;}
+.logo-mark{width:30px;height:30px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;}
+.logo-mark svg{width:16px;height:16px;fill:none;stroke:#000;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;}
+.logo-text{font-size:15px;font-weight:600;letter-spacing:-0.3px;}
+.logo-text span{color:var(--accent);}
+
+/* PORTFOLIO SELECTOR */
+.portfolio-selector{margin:0 10px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:2px;}
+.portfolio-header{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;cursor:pointer;border-radius:8px;transition:background 0.15s;}
+.portfolio-header:hover{background:var(--bg4);}
+.portfolio-name{font-size:13px;font-weight:500;color:var(--text);flex:1;}
+.portfolio-chevron{color:var(--text3);font-size:11px;}
+.portfolio-dropdown{display:none;padding:4px;}
+.portfolio-dropdown.open{display:block;}
+.portfolio-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--text2);transition:all 0.15s;}
+.portfolio-item:hover{background:var(--bg4);color:var(--text);}
+.portfolio-item.active{color:var(--accent);font-weight:500;}
+.portfolio-item-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;}
+.portfolio-add{display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text3);transition:all 0.15s;margin-top:2px;border-top:1px solid var(--border);}
+.portfolio-add:hover{color:var(--accent);}
+
+.nav-label{font-size:10px;font-weight:500;color:var(--text3);letter-spacing:0.8px;text-transform:uppercase;padding:0 18px;margin-bottom:3px;margin-top:14px;}
+.nav-section{padding:0 8px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius);cursor:pointer;color:var(--text2);font-size:13px;transition:all 0.15s;margin-bottom:1px;}
+.nav-item:hover{background:var(--bg3);color:var(--text);}
+.nav-item.active{background:var(--accent-dim);color:var(--accent);font-weight:500;}
+.nav-item svg{width:15px;height:15px;flex-shrink:0;}
+.nav-badge{margin-left:auto;background:var(--amber-dim);color:var(--amber);font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;}
+
+.sidebar-bottom{margin-top:auto;padding:12px 8px 0;border-top:1px solid var(--border);}
+.sync-status{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12px;color:var(--text3);}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;}
+.sync-dot.syncing{background:var(--amber);animation:pulse 1s infinite;}
+.sync-dot.error{background:var(--red);}
+
+/* MAIN */
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+
+/* TOPBAR */
+.topbar{padding:12px 26px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg);position:sticky;top:0;z-index:10;}
+.topbar-title{font-size:17px;font-weight:600;letter-spacing:-0.4px;}
+.topbar-right{display:flex;align-items:center;gap:9px;}
+
+/* DATE FILTER */
+.date-filter{display:flex;align-items:center;gap:3px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:3px;}
+.date-chip{padding:5px 10px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all 0.15s;white-space:nowrap;}
+.date-chip:hover{color:var(--text);background:var(--bg3);}
+.date-chip.active{background:var(--accent-dim);color:var(--accent);}
+.date-sep{color:var(--text3);font-size:11px;padding:0 3px;}
+.date-custom{display:flex;align-items:center;gap:3px;padding:0 5px;}
+.date-custom input{background:transparent;border:none;color:var(--text3);font-family:var(--mono);font-size:11px;width:90px;cursor:pointer;outline:none;}
+.date-custom input:focus{color:var(--text);}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s;border:none;}
+.btn-primary{background:var(--accent);color:#000;}
+.btn-primary:hover{background:var(--accent2);}
+.btn-secondary{background:var(--bg3);color:var(--text);border:1px solid var(--border2);}
+.btn-secondary:hover{background:var(--bg4);}
+.btn-danger{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,77,106,0.15);}
+.btn-danger:hover{background:rgba(255,77,106,0.2);}
+.btn-sm{padding:4px 10px;font-size:12px;}
+.btn svg{width:13px;height:13px;}
+
+/* FX STRIP */
+.fx-strip{display:flex;gap:18px;align-items:center;padding:6px 26px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:11.5px;}
+.fx-pair{display:flex;align-items:center;gap:6px;color:var(--text3);}
+.fx-val{color:var(--text2);font-family:var(--mono);font-weight:500;}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 2s infinite;}
+.fy-badge{display:inline-flex;align-items:center;gap:4px;background:var(--purple-dim);border:1px solid rgba(167,139,250,0.15);color:var(--purple);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;margin-left:auto;}
+
+/* CONTENT */
+.content{padding:20px 26px;flex:1;}
+
+/* VIEWS */
+.view{display:none;}
+.view.active{display:block;animation:fadeIn 0.18s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:translateY(0);}}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* METRICS */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:20px;}
+.metrics-3{grid-template-columns:repeat(3,1fr)!important;}
+.metric{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:15px 16px;position:relative;overflow:hidden;transition:border-color 0.2s;}
+.metric:hover{border-color:var(--border2);}
+.metric-bar{position:absolute;top:0;left:0;right:0;height:2px;}
+.metric-label{font-size:11px;color:var(--text2);font-weight:500;letter-spacing:0.3px;text-transform:uppercase;margin-bottom:9px;}
+.metric-value{font-size:23px;font-weight:600;letter-spacing:-0.8px;font-family:var(--mono);}
+.metric-sub{font-size:12px;margin-top:5px;display:flex;align-items:center;gap:4px;}
+.pos{color:var(--green);}
+.neg{color:var(--red);}
+.neu{color:var(--text2);}
+
+/* GRID */
+.grid2{display:grid;grid-template-columns:1.7fr 1fr;gap:13px;margin-bottom:13px;}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-bottom:13px;}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:13px;}
+
+/* CARDS */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;}
+.card-head{padding:13px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-size:13px;font-weight:600;letter-spacing:-0.2px;}
+.card-sub{font-size:11px;color:var(--text3);margin-top:1px;}
+.card-body{padding:14px 16px;}
+.card-link{font-size:12px;color:var(--accent);cursor:pointer;font-weight:500;}
+.card-link:hover{opacity:0.8;}
+
+/* TABLE */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead th{text-align:left;color:var(--text3);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;padding:9px 13px;border-bottom:1px solid var(--border);white-space:nowrap;}
+tbody td{padding:9px 13px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr{transition:background 0.1s;}
+tbody tr:hover{background:rgba(255,255,255,0.02);}
+.mono{font-family:var(--mono);}
+.selectable{cursor:pointer;}
+.selectable.selected{background:var(--accent-dim2)!important;}
+.selectable.selected td:first-child::before{content:'✓';color:var(--accent);margin-right:8px;font-weight:600;}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:500;white-space:nowrap;}
+.badge-green{background:var(--green-dim);color:var(--green);}
+.badge-red{background:var(--red-dim);color:var(--red);}
+.badge-amber{background:var(--amber-dim);color:var(--amber);}
+.badge-blue{background:var(--blue-dim);color:var(--blue);}
+.badge-purple{background:var(--purple-dim);color:var(--purple);}
+.badge-gray{background:rgba(255,255,255,0.06);color:var(--text2);}
+
+/* BROKER TAGS */
+.broker-tag{display:inline-block;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:500;}
+.bt-hl{background:rgba(0,212,170,0.1);color:var(--accent);}
+.bt-ibkr{background:rgba(77,159,255,0.1);color:var(--blue);}
+.bt-binance{background:rgba(245,166,35,0.1);color:var(--amber);}
+.bt-bybit{background:rgba(245,166,35,0.1);color:var(--amber);}
+.bt-bitget{background:rgba(167,139,250,0.1);color:var(--purple);}
+.bt-bingx{background:rgba(255,77,106,0.1);color:var(--red);}
+.bt-capitalcom{background:rgba(77,159,255,0.1);color:var(--blue);}
+
+/* ALLOC */
+.alloc-list{display:flex;flex-direction:column;gap:10px;}
+.alloc-row{display:flex;align-items:center;gap:9px;}
+.alloc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.alloc-name{font-size:12px;width:130px;flex-shrink:0;}
+.alloc-track{flex:1;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;}
+.alloc-fill{height:100%;border-radius:2px;transition:width 0.5s;}
+.alloc-pct{font-size:12px;color:var(--text2);font-family:var(--mono);width:32px;text-align:right;flex-shrink:0;}
+.alloc-val{font-size:12px;color:var(--text3);font-family:var(--mono);width:65px;text-align:right;flex-shrink:0;}
+
+/* BAR CHART */
+.bar-chart{display:flex;align-items:flex-end;gap:4px;padding:0 2px;}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:flex-end;}
+.bar-fill{width:100%;border-radius:3px 3px 0 0;min-height:3px;}
+.bar-lbl{font-size:10px;color:var(--text3);font-family:var(--mono);}
+
+/* TABS */
+.tabs{display:flex;gap:2px;background:var(--bg3);padding:3px;border-radius:var(--radius);margin-bottom:16px;width:fit-content;}
+.tab{padding:6px 13px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text2);transition:all 0.15s;}
+.tab.active{background:var(--bg);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.4);}
+
+/* IMPORT ZONE */
+.import-zone{border:1.5px dashed var(--border2);border-radius:var(--radius-lg);padding:22px;text-align:center;cursor:pointer;transition:all 0.2s;}
+.import-zone:hover,.import-zone.drag{border-color:var(--accent);background:var(--accent-dim2);}
+.import-icon{width:38px;height:38px;background:var(--bg3);border-radius:10px;display:flex;align-items:center;justify-content:center;margin:0 auto 9px;}
+.import-icon svg{width:19px;height:19px;color:var(--accent);}
+.broker-pills{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:10px;}
+.broker-pill{padding:4px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;transition:all 0.15s;font-weight:500;}
+.broker-pill:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
+
+/* NOTICE */
+.notice{border-radius:var(--radius);padding:10px 13px;display:flex;align-items:flex-start;gap:8px;margin-bottom:13px;}
+.notice-warn{background:var(--amber-dim);border:1px solid rgba(245,166,35,0.15);}
+.notice-info{background:var(--blue-dim);border:1px solid rgba(77,159,255,0.15);}
+.notice-success{background:var(--green-dim);border:1px solid rgba(0,212,170,0.15);}
+.notice svg{width:13px;height:13px;flex-shrink:0;margin-top:1px;}
+.notice-warn svg{color:var(--amber);}
+.notice-info svg{color:var(--blue);}
+.notice-success svg{color:var(--green);}
+.notice-text{font-size:12px;color:var(--text2);line-height:1.5;}
+
+/* MATCH */
+.match-item{background:var(--bg3);border:1px solid rgba(245,166,35,0.2);border-radius:var(--radius);padding:11px 13px;margin-bottom:7px;display:flex;align-items:center;gap:11px;flex-wrap:wrap;}
+.match-dot{width:6px;height:6px;background:var(--amber);border-radius:50%;flex-shrink:0;}
+.match-info{flex:1;min-width:180px;}
+.match-title{font-size:13px;font-weight:500;}
+.match-sub{font-size:11px;color:var(--text2);margin-top:2px;}
+.match-select{background:var(--bg4);border:1px solid var(--border2);color:var(--text);padding:5px 9px;border-radius:7px;font-family:var(--font);font-size:12px;outline:none;}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:24px;width:500px;max-width:94vw;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:4px;letter-spacing:-0.3px;}
+.modal-sub{font-size:13px;color:var(--text2);margin-bottom:18px;}
+.form-group{margin-bottom:13px;}
+.form-label{font-size:12px;color:var(--text2);font-weight:500;margin-bottom:5px;display:block;}
+.form-input{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:8px 11px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;transition:border-color 0.15s;}
+.form-input:focus{border-color:var(--accent);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+.form-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a9099' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;}
+.modal-actions{display:flex;gap:9px;justify-content:flex-end;margin-top:18px;}
+
+/* BACKUP */
+.backup-item{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:11px 13px;display:flex;align-items:center;gap:11px;margin-bottom:6px;}
+.backup-icon{width:30px;height:30px;background:var(--bg4);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.backup-icon svg{width:14px;height:14px;color:var(--text2);}
+.backup-info{flex:1;}
+.backup-title{font-size:13px;font-weight:500;}
+.backup-sub{font-size:11px;color:var(--text3);margin-top:1px;}
+
+/* PAIRS */
+.pair-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px;}
+.pair-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.pair-name{font-size:14px;font-weight:600;}
+.pair-legs{display:flex;flex-direction:column;gap:6px;}
+.pair-leg{display:flex;align-items:center;justify-content:space-between;font-size:12px;padding:6px 10px;background:var(--bg4);border-radius:7px;}
+.pair-net{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:13px;font-weight:500;}
+
+/* TAG PILL */
+.tag-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--bg4);border:1px solid var(--border2);border-radius:20px;font-size:11px;color:var(--text2);margin:2px;}
+
+/* EMPTY */
+.empty{text-align:center;padding:48px 20px;}
+.empty-icon{width:48px;height:48px;background:var(--bg3);border-radius:13px;display:flex;align-items:center;justify-content:center;margin:0 auto 13px;}
+.empty-icon svg{width:22px;height:22px;color:var(--text3);}
+.empty-title{font-size:15px;font-weight:600;margin-bottom:5px;}
+.empty-sub{font-size:13px;color:var(--text2);line-height:1.6;}
+
+/* TOOLTIP */
+.tip{position:relative;cursor:help;}
+.tip:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);background:var(--bg4);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:6px;font-size:11px;white-space:nowrap;z-index:50;pointer-events:none;}
+
+/* TOAST */
+.toast-container{position:fixed;bottom:18px;right:18px;z-index:200;display:flex;flex-direction:column;gap:7px;}
+.toast{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:9px;box-shadow:0 4px 20px rgba(0,0,0,0.4);animation:slideIn 0.2s ease;max-width:300px;}
+.toast-success{border-color:rgba(0,212,170,0.3);}
+.toast-error{border-color:rgba(255,77,106,0.3);}
+.toast-info{border-color:rgba(77,159,255,0.3);}
+@media print {
+  .sidebar, .topbar, .fx-strip, .btn, .nav-item, .date-filter, .modal-overlay { display:none!important; }
+  .main { overflow:visible!important; }
+  body { background:#fff!important; color:#000!important; }
+  .card { border:1px solid #ccc!important; break-inside:avoid; }
+  table { font-size:11px; }
+  .pos, .neg { font-weight:600; }
+  .metric { border:1px solid #ccc!important; }
+}
+
+
+/* CGT BAR */
+.cgt-bar-bg{background:var(--bg4);border-radius:4px;height:5px;overflow:hidden;margin-top:7px;}
+.cgt-bar-fill{height:100%;border-radius:4px;background:var(--accent);transition:width 0.5s;}
+
+/* FEES SUMMARY */
+.fee-stat{background:var(--bg3);border-radius:var(--radius);padding:12px 14px;text-align:center;}
+.fee-stat-val{font-size:20px;font-weight:600;font-family:var(--mono);color:var(--text);margin-bottom:3px;}
+.fee-stat-lbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;}
+
+/* SL/TP INLINE */
+.sltp-row{display:flex;gap:8px;align-items:center;margin-top:4px;}
+.sltp-item{display:flex;align-items:center;gap:5px;font-size:11px;}
+.sltp-lbl{color:var(--text3);}
+.sltp-val{font-family:var(--mono);color:var(--text2);}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
+      <span class="logo-text">Folio<span>Track</span></span>
+    </div>
+
+    <!-- PORTFOLIO SELECTOR -->
+    <div class="portfolio-selector">
+      <div class="portfolio-header" onclick="togglePortfolioDropdown()">
+        <span class="portfolio-name" id="current-portfolio-name">Main Portfolio</span>
+        <span class="portfolio-chevron">▾</span>
+      </div>
+      <div class="portfolio-dropdown" id="portfolio-dropdown">
+        <div id="portfolio-list"></div>
+        <div class="portfolio-add" onclick="openModal('modal-new-portfolio')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New portfolio
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Overview</div>
+      <div class="nav-item active" onclick="showView('dashboard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item" onclick="showView('positions')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Positions
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Activity</div>
+      <div class="nav-item" onclick="showView('trades')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+        Trades
+      </div>
+      <div class="nav-item" onclick="showView('dividends')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        Dividends
+      </div>
+      <div class="nav-item" onclick="showView('pnl')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        P&amp;L Analysis
+      </div>
+      <div class="nav-item" onclick="showView('pairs')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+        Pairs Trading
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Costs & Reports</div>
+      <div class="nav-item" onclick="showView('fees')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        Fees
+      </div>
+      <div class="nav-item" onclick="showView('tax')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Tax Report
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Data</div>
+      <div class="nav-item" onclick="showView('import')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import CSV
+      </div>
+      <div class="nav-item" onclick="showView('backups')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Backups
+      </div>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="nav-item" onclick="openModal('modal-trade')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        Add Trade
+      </div>
+      <div class="sync-status">
+        <div class="sync-dot" id="sync-dot"></div>
+        <span id="sync-text">Connecting...</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="fx-strip">
+      <span class="live-dot"></span>
+      <span style="color:var(--text3);font-size:11px;margin-right:3px;">Live FX</span>
+      <div class="fx-pair"><span>USD/GBP</span><span class="fx-val" id="fx-usd">—</span></div>
+      <div class="fx-pair"><span>EUR/GBP</span><span class="fx-val" id="fx-eur">—</span></div>
+      <div class="fx-pair"><span>USDT/GBP</span><span class="fx-val" id="fx-usdt">—</span></div>
+      <div class="fy-badge">UK FY: 1 Apr 2025 – 31 Mar 2026</div>
+    </div>
+
+    <div class="topbar">
+      <div class="topbar-title" id="page-title">Dashboard</div>
+      <div class="topbar-right">
+        <div class="date-filter">
+          <div class="date-chip active" onclick="setFilter(this,'1m')">1M</div>
+          <div class="date-chip" onclick="setFilter(this,'3m')">3M</div>
+          <div class="date-chip" onclick="setFilter(this,'ytd')">YTD</div>
+          <div class="date-chip" onclick="setFilter(this,'fy')">UK FY</div>
+          <div class="date-chip" onclick="setFilter(this,'1y')">1Y</div>
+          <div class="date-chip" onclick="setFilter(this,'all')">All</div>
+          <span class="date-sep">|</span>
+          <div class="date-custom">
+            <input type="date" id="date-from">
+            <span class="date-sep">→</span>
+            <input type="date" id="date-to">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="openModal('modal-trade')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Trade
+        </button>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="view-dashboard" class="view active">
+      <div class="content">
+        <div class="metrics" id="dash-metrics">
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--accent),transparent);"></div><div class="metric-label">Total Cost Basis</div><div class="metric-value" id="m-total">£0</div><div class="metric-sub neu" id="m-total-sub">no trades yet</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--blue),transparent);"></div><div class="metric-label">Open Positions</div><div class="metric-value" id="m-positions">0</div><div class="metric-sub neu" id="m-positions-sub">0 brokers</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--purple),transparent);"></div><div class="metric-label">Realised P&amp;L (UK FY)</div><div class="metric-value" id="m-realised">£0</div><div class="metric-sub neu" id="m-realised-sub">0 closed</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--amber),transparent);"></div><div class="metric-label">Total Fees (UK FY)</div><div class="metric-value" id="m-fees">£0</div><div class="metric-sub neu">all brokers</div></div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <div class="card-head"><div><div class="card-title">Open Positions</div><div class="card-sub">Cost basis in GBP</div></div><span class="card-link" onclick="showView('positions')">View all →</span></div>
+            <div class="table-wrap" id="dash-pos-table"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-title">No positions yet</div><div class="empty-sub">Import a CSV or add a trade to get started.</div></div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div class="card"><div class="card-head"><div class="card-title">By Broker</div></div><div class="card-body"><div class="alloc-list" id="dash-broker-alloc"><div style="font-size:12px;color:var(--text3);text-align:center;padding:8px;">No data</div></div></div></div>
+            <div class="card"><div class="card-head"><div class="card-title">By Class</div></div><div class="card-body"><div class="alloc-list" id="dash-class-alloc"><div style="font-size:12px;color:var(--text3);text-align:center;padding:8px;">No data</div></div></div></div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card"><div class="card-head"><div class="card-title">Monthly P&amp;L</div><span class="card-link" onclick="showView('pnl')">Full →</span></div><div class="card-body"><div class="bar-chart" style="height:90px;" id="dash-pnl-chart"><div style="font-size:12px;color:var(--text3);text-align:center;width:100%;padding:25px 0;">No data</div></div></div></div>
+          <div class="card"><div class="card-head"><div class="card-title">Quick Import</div><span class="card-link" onclick="showView('import')">All →</span></div><div class="card-body" style="padding-top:8px;"><div class="import-zone" onclick="triggerImport()"><div class="import-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><div style="font-size:13px;font-weight:500;margin-bottom:3px;">Drop CSV here</div><div style="font-size:12px;color:var(--text2);">Auto-detects broker</div><div class="broker-pills"><span class="broker-pill">IBKR</span><span class="broker-pill">HL</span><span class="broker-pill">Binance</span><span class="broker-pill">Bybit</span><span class="broker-pill">Bitget</span><span class="broker-pill">BingX</span><span class="broker-pill">Capital.com</span></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POSITIONS -->
+    <div id="view-positions" class="view">
+      <div class="content">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div class="tabs"><div class="tab active" onclick="filterPos('all',this)">All</div><div class="tab" onclick="filterPos('stocks',this)">Stocks &amp; ETFs</div><div class="tab" onclick="filterPos('crypto',this)">Crypto</div><div class="tab" onclick="filterPos('long',this)">Long</div><div class="tab" onclick="filterPos('short',this)">Short</div></div>
+          <select id="pos-broker-filter" onchange="renderPositions()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;">
+            <option value="">All Brokers</option>
+            <option value="IBKR">IBKR</option>
+            <option value="Hargreaves Lansdown">Hargreaves Lansdown</option>
+            <option value="Bitget">Bitget</option>
+            <option value="BingX">BingX</option>
+            <option value="Binance">Binance</option>
+            <option value="Bybit">Bybit</option>
+          </select>
+        </div>
+        <div class="card"><div class="card-head"><div><div class="card-title">Open Positions</div><div class="card-sub" id="pos-sub">—</div></div><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div><div class="table-wrap" id="pos-table-wrap"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-title">No positions</div></div></div></div>
+      </div>
+    </div>
+
+    <!-- TRADES -->
+    <div id="view-trades" class="view">
+      <div class="content">
+        <div id="pending-matches-container"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div class="tabs" style="margin-bottom:0;"><div class="tab active" onclick="filterTrades('all',this)">All</div><div class="tab" onclick="filterTrades('buy',this)">Buys</div><div class="tab" onclick="filterTrades('sell',this)">Sells</div></div>
+          <select id="trades-broker-filter" onchange="renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;">
+            <option value="">All Brokers</option>
+            <option value="IBKR">IBKR</option>
+            <option value="Hargreaves Lansdown">Hargreaves Lansdown</option>
+            <option value="Bitget">Bitget</option>
+            <option value="BingX">BingX</option>
+            <option value="Binance">Binance</option>
+            <option value="Bybit">Bybit</option>
+          </select>
+          <input type="text" id="trades-search" placeholder="Search asset, broker, tag..." oninput="renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;width:240px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="selected-trades-count" style="font-size:12px;color:var(--text3);display:none;"></span>
+            <button class="btn btn-danger btn-sm" id="btn-delete-selected" style="display:none;" onclick="deleteSelectedTrades()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              Delete Selected
+            </button>
+            <button class="btn btn-secondary btn-sm" id="btn-create-pair" style="display:none;" onclick="openCreatePair()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/></svg>
+              Create Pair
+            </button>
+          </div>
+        </div>
+        <div class="notice notice-info" style="margin-bottom:12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><div class="notice-text">To create a pair: select 2+ trades by clicking on them, then click <strong>Create Pair</strong>.</div></div>
+        <div class="card"><div class="card-head"><div><div class="card-title">Trade History</div><div class="card-sub" id="trades-sub">—</div></div><div style="display:flex;gap:6px;"><button class="btn btn-secondary btn-sm" onclick="exportTradesCSV()">Export CSV</button><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div></div><div class="table-wrap" id="trades-table-wrap"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></div><div class="empty-title">No trades yet</div></div></div></div>
+      </div>
+    </div>
+
+    <!-- DIVIDENDS -->
+    <div id="view-dividends" class="view">
+      <div class="content">
+        <div class="metrics metrics-3">
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--green),transparent);"></div><div class="metric-label">Total Dividends (UK FY)</div><div class="metric-value" id="div-total-fy">£0</div><div class="metric-sub neu">Income tax applicable</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--amber),transparent);"></div><div class="metric-label">Withholding Tax Paid</div><div class="metric-value" id="div-wht">£0</div><div class="metric-sub neu">may be reclaimable</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--blue),transparent);"></div><div class="metric-label">Net Received</div><div class="metric-value" id="div-net">£0</div><div class="metric-sub neu">after withholding tax</div></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+          <button class="btn btn-primary btn-sm" onclick="openModal('modal-dividend')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Dividend
+          </button>
+        </div>
+        <div class="card"><div class="card-head"><div class="card-title">Dividend History</div><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div><div class="table-wrap" id="div-table-wrap"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div><div class="empty-title">No dividends yet</div><div class="empty-sub">Dividends from IBKR and HL CSVs are detected automatically on import.</div></div></div></div>
+      </div>
+    </div>
+
+    <!-- P&L -->
+    <div id="view-pnl" class="view">
+      <div class="content">
+        <div class="metrics metrics-3">
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--green),transparent);"></div><div class="metric-label">Realised P&amp;L (UK FY)</div><div class="metric-value" id="pnl-realised">£0</div><div class="metric-sub neu">6 Apr 2025 – today</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--blue),transparent);"></div><div class="metric-label">By Tag</div><div class="metric-value" id="pnl-by-tag-count">0 tags</div><div class="metric-sub neu">see breakdown below</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--purple),transparent);"></div>
+            <div class="metric-label">CGT Allowance 25/26</div>
+            <div class="metric-value" id="pnl-cgt">£0 / £3,000</div>
+            <div class="cgt-bar-bg"><div class="cgt-bar-fill" id="cgt-fill" style="width:0%"></div></div>
+            <div class="metric-sub neu" id="pnl-cgt-sub">£3,000 remaining</div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card"><div class="card-head"><div class="card-title">Monthly P&amp;L</div><div style="display:flex;gap:6px;align-items:center;"><span class="fy-badge" style="display:inline-flex;align-items:center;gap:4px;background:var(--purple-dim);border:1px solid rgba(167,139,250,0.15);color:var(--purple);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;">UK FY 2025/26</span><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div></div><div class="card-body"><div class="bar-chart" style="height:120px;" id="pnl-chart"><div style="font-size:12px;color:var(--text3);text-align:center;width:100%;padding:35px 0;">No data</div></div></div></div>
+          <div class="card"><div class="card-head"><div class="card-title">P&amp;L by Asset</div></div><div class="table-wrap" id="pnl-by-asset"><div style="padding:18px;text-align:center;font-size:12px;color:var(--text3);">No closed trades</div></div></div>
+        </div>
+        <div class="card"><div class="card-head"><div class="card-title">P&amp;L by Tag / Strategy</div></div><div id="pnl-by-tag" style="padding:14px 16px;"><div style="font-size:12px;color:var(--text3);">No tags assigned yet. Add tags to your trades to see strategy breakdown.</div></div></div>
+      </div>
+    </div>
+
+    <!-- PAIRS -->
+    <div id="view-pairs" class="view">
+      <div class="content">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+          <button class="btn btn-secondary btn-sm" onclick="showView('trades')">← Select trades to create a pair</button>
+        </div>
+        <div id="pairs-list"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/></svg></div><div class="empty-title">No pairs yet</div><div class="empty-sub">Go to Trades, select 2 or more trades, and click "Create Pair".</div></div></div>
+      </div>
+    </div>
+
+    <!-- FEES -->
+    <div id="view-fees" class="view">
+      <div class="content">
+        <div class="grid4" id="fee-stats">
+          <div class="fee-stat"><div class="fee-stat-val" id="fee-total">£0</div><div class="fee-stat-lbl">Total Fees</div></div>
+          <div class="fee-stat"><div class="fee-stat-val" id="fee-fy">£0</div><div class="fee-stat-lbl">UK FY 25/26</div></div>
+          <div class="fee-stat"><div class="fee-stat-val" id="fee-avg">£0</div><div class="fee-stat-lbl">Avg per trade</div></div>
+          <div class="fee-stat"><div class="fee-stat-val" id="fee-trades">0</div><div class="fee-stat-lbl">Trades with fees</div></div>
+        </div>
+        <div class="grid2">
+          <div class="card"><div class="card-head"><div class="card-title">Fees by Broker</div></div><div class="card-body"><div class="alloc-list" id="fees-by-broker"><div style="font-size:12px;color:var(--text3);">No fee data</div></div></div></div>
+          <div class="card"><div class="card-head"><div class="card-title">Fees by Month</div></div><div class="card-body"><div class="bar-chart" style="height:100px;" id="fees-chart"><div style="font-size:12px;color:var(--text3);text-align:center;width:100%;padding:30px 0;">No data</div></div></div></div>
+        </div>
+        <div class="card"><div class="card-head"><div class="card-title">Fee Detail</div></div><div class="table-wrap" id="fees-table"><div style="padding:18px;text-align:center;font-size:12px;color:var(--text3);">No fees recorded</div></div></div>
+      </div>
+    </div>
+
+    <!-- TAX REPORT -->
+    <div id="view-tax" class="view">
+      <div class="content">
+        <div class="metrics metrics-3">
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--green),transparent);"></div><div class="metric-label">Capital Gains (UK FY)</div><div class="metric-value" id="tax-gains">£0</div><div class="metric-sub neu">CGT applicable</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--red),transparent);"></div><div class="metric-label">Capital Losses</div><div class="metric-value" id="tax-losses">£0</div><div class="metric-sub neu">can offset gains</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--amber),transparent);"></div><div class="metric-label">Dividend Income</div><div class="metric-value" id="tax-div">£0</div><div class="metric-sub neu">Income Tax applicable</div></div>
+        </div>
+        <div id="bnb-warnings" style="margin-bottom:14px;"></div>
+        <div class="card" style="margin-bottom:13px;">
+          <div class="card-head"><div><div class="card-title">CGT Disposals — UK FY 2025/26</div><div class="card-sub">For HMRC Self Assessment</div></div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
+              <button class="btn btn-secondary btn-sm" onclick="exportTaxReport()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export CSV
+            </button>
+            </div>
+          </div>
+          <div class="table-wrap" id="tax-disposals-table"><div style="padding:18px;text-align:center;font-size:12px;color:var(--text3);">No disposals in this tax year</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMPORT -->
+    <div id="view-import" class="view">
+      <div class="content">
+        <div class="grid2">
+          <div>
+            <div class="import-zone" id="main-drop-zone" style="margin-bottom:13px;">
+              <div class="import-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+              <div style="font-size:13px;font-weight:500;margin-bottom:3px;">Drop CSV or Excel file here</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">FX auto-fetched · Broker format auto-detected</div>
+              <div class="broker-pills">
+                <span class="broker-pill" onclick="triggerFileFor('IBKR')">IBKR</span>
+                <span class="broker-pill" onclick="triggerFileFor('HL')">Hargreaves Lansdown</span>
+                <span class="broker-pill" onclick="triggerFileFor('Binance')">Binance</span>
+                <span class="broker-pill" onclick="triggerFileFor('Bybit')">Bybit</span>
+                <span class="broker-pill" onclick="triggerFileFor('Bitget')">Bitget</span>
+                <span class="broker-pill" onclick="triggerFileFor('BingX')">BingX</span>
+                <span class="broker-pill" onclick="triggerFileFor('Capital.com')">Capital.com</span>
+              </div>
+              <input type="file" id="csv-input" accept=".csv,.xlsx,.xls" style="display:none;" onchange="handleFile(event)">
+            </div>
+            <div class="card"><div class="card-head"><div class="card-title">Import History</div></div><div id="import-history" style="padding:6px 0;"><div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">No imports yet</div></div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div class="card"><div class="card-head"><div class="card-title">How it works</div></div><div class="card-body">
+              <div style="display:flex;flex-direction:column;gap:14px;">
+                <div style="display:flex;gap:11px;align-items:flex-start;"><div style="width:22px;height:22px;background:var(--accent-dim);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:600;color:var(--accent);">1</div><div><div style="font-size:13px;font-weight:500;margin-bottom:2px;">Export from broker</div><div style="font-size:12px;color:var(--text2);line-height:1.5;">Download CSV from IBKR, HL, Binance, Bybit, etc.</div></div></div>
+                <div style="display:flex;gap:11px;align-items:flex-start;"><div style="width:22px;height:22px;background:var(--accent-dim);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:600;color:var(--accent);">2</div><div><div style="font-size:13px;font-weight:500;margin-bottom:2px;">Drop it here</div><div style="font-size:12px;color:var(--text2);line-height:1.5;">Format auto-detected. If unrecognised, column mapping tool appears.</div></div></div>
+                <div style="display:flex;gap:11px;align-items:flex-start;"><div style="width:22px;height:22px;background:var(--accent-dim);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:600;color:var(--accent);">3</div><div><div style="font-size:13px;font-weight:500;margin-bottom:2px;">FX auto-converted</div><div style="font-size:12px;color:var(--text2);line-height:1.5;">USD/EUR → GBP using ECB historical rate per transaction date. Original currency preserved.</div></div></div>
+                <div style="display:flex;gap:11px;align-items:flex-start;"><div style="width:22px;height:22px;background:var(--accent-dim);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:600;color:var(--accent);">4</div><div><div style="font-size:13px;font-weight:500;margin-bottom:2px;">Confirm sell matches</div><div style="font-size:12px;color:var(--text2);line-height:1.5;">FIFO for crypto, Share Pool for stocks. Auto-suggested, you confirm.</div></div></div>
+              </div>
+            </div></div>
+            <div class="card"><div class="card-head"><div class="card-title">Format not recognised?</div></div><div class="card-body"><div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:10px;">If your broker changed their CSV format, use manual column mapping. Your mapping is saved for next time.</div><button class="btn btn-secondary btn-sm" onclick="openModal('modal-map')">Manual column mapping</button></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BACKUPS -->
+    <div id="view-backups" class="view">
+      <div class="content">
+        <div class="grid2">
+          <div>
+            <div class="card" style="margin-bottom:13px;"><div class="card-head"><div><div class="card-title">Snapshots</div><div class="card-sub">Auto-saved before each import</div></div></div><div id="snapshots-list" style="padding:6px 0;"><div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">No snapshots yet</div></div></div>
+          </div>
+          <div class="card"><div class="card-head"><div class="card-title">Manual Backup</div></div><div class="card-body">
+            <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6;">Export all data as JSON. Save to computer or Google Drive. Restore on any device.</div>
+            <button class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:9px;" onclick="exportJSON()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export backup JSON
+            </button>
+            <div style="border-top:1px solid var(--border);padding-top:12px;">
+              <div style="font-size:13px;font-weight:500;margin-bottom:5px;">Restore from backup</div>
+              <label class="btn btn-secondary" style="width:100%;justify-content:center;cursor:pointer;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Import backup JSON
+                <input type="file" accept=".json" style="display:none;" onchange="importJSON(event)">
+              </label>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODALS -->
+<!-- ADD TRADE -->
+<div class="modal-overlay" id="modal-trade">
+  <div class="modal">
+    <div class="modal-title">Add Trade</div>
+    <div class="modal-sub">Manually record a buy or sell</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Type</label><select class="form-input form-select" id="t-type"><option value="buy">Buy</option><option value="sell">Sell</option></select></div>
+      <div class="form-group"><label class="form-label">Class</label><select class="form-input form-select" id="t-class"><option value="Crypto">Crypto</option><option value="Stock/ETF">Stock / ETF</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Asset (ticker)</label><input class="form-input" id="t-asset" type="text" placeholder="BTC, SPAG, TSLA..."></div>
+      <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="t-desc" type="text" placeholder="Bitcoin, iShares Agribusiness..."></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Broker</label><select class="form-input form-select" id="t-broker"><option>Hargreaves Lansdown</option><option>IBKR</option><option>Binance</option><option>Bybit</option><option>Bitget</option><option>BingX</option><option>Capital.com</option></select></div>
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="t-date" type="date"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Quantity</label><input class="form-input" id="t-qty" type="number" step="any" placeholder="0.00"></div>
+      <div class="form-group"><label class="form-label">Price per unit</label><input class="form-input" id="t-price" type="number" step="any" placeholder="0.00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Currency</label><select class="form-input form-select" id="t-currency" onchange="updateFxHint()"><option>GBP</option><option>USD</option><option>EUR</option><option>USDT</option></select></div>
+      <div class="form-group"><label class="form-label">Side</label><select class="form-input form-select" id="t-side"><option value="Long">Long</option><option value="Short">Short</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Leverage</label><input class="form-input" id="t-leverage" type="number" placeholder="1" min="1"></div>
+      <div class="form-group"><label class="form-label">Fees (in trade currency)</label><input class="form-input" id="t-fees" type="number" step="any" placeholder="0.00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Stop Loss (optional)</label><input class="form-input" id="t-sl" type="number" step="any" placeholder="0.00"></div>
+      <div class="form-group"><label class="form-label">Take Profit (optional)</label><input class="form-input" id="t-tp" type="number" step="any" placeholder="0.00"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Tags (comma separated)</label><input class="form-input" id="t-tags" type="text" placeholder="pairs trade, DCA, speculative..."></div>
+    <div class="form-group"><label class="form-label">Notes</label><input class="form-input" id="t-notes" type="text" placeholder=""></div>
+    <div id="t-fx-hint" style="font-size:12px;color:var(--text3);margin-top:-8px;margin-bottom:8px;"></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('modal-trade')">Cancel</button><button class="btn btn-primary" onclick="saveTrade()">Add Trade</button></div>
+  </div>
+</div>
+
+<!-- ADD DIVIDEND -->
+<div class="modal-overlay" id="modal-dividend">
+  <div class="modal">
+    <div class="modal-title">Add Dividend</div>
+    <div class="modal-sub">Record a dividend payment</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Asset</label><input class="form-input" id="d-asset" type="text" placeholder="SPAG, AAPL..."></div>
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="d-date" type="date"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Gross Amount</label><input class="form-input" id="d-gross" type="number" step="any" placeholder="0.00"></div>
+      <div class="form-group"><label class="form-label">Withholding Tax</label><input class="form-input" id="d-wht" type="number" step="any" placeholder="0.00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Currency</label><select class="form-input form-select" id="d-currency"><option>GBP</option><option>USD</option><option>EUR</option></select></div>
+      <div class="form-group"><label class="form-label">Broker</label><select class="form-input form-select" id="d-broker"><option>Hargreaves Lansdown</option><option>IBKR</option><option>Binance</option><option>Bybit</option></select></div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('modal-dividend')">Cancel</button><button class="btn btn-primary" onclick="saveDividend()">Add Dividend</button></div>
+  </div>
+</div>
+
+<!-- CREATE PAIR -->
+<div class="modal-overlay" id="modal-pair">
+  <div class="modal">
+    <div class="modal-title">Create Pair</div>
+    <div class="modal-sub" id="pair-modal-sub">Selected trades will be grouped as a pair</div>
+    <div class="form-group"><label class="form-label">Pair name</label><input class="form-input" id="pair-name" type="text" placeholder="e.g. Gold-Nickel-Jan25"></div>
+    <div id="pair-selected-trades" style="margin-bottom:14px;"></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('modal-pair')">Cancel</button><button class="btn btn-primary" onclick="savePair()">Create Pair</button></div>
+  </div>
+</div>
+
+<!-- NEW PORTFOLIO -->
+<div class="modal-overlay" id="modal-new-portfolio">
+  <div class="modal">
+    <div class="modal-title">New Portfolio</div>
+    <div class="modal-sub">Create a separate portfolio with its own trades and data</div>
+    <div class="form-group"><label class="form-label">Portfolio name</label><input class="form-input" id="new-portfolio-name" type="text" placeholder="e.g. Crypto, Long-term, CFDs..."></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('modal-new-portfolio')">Cancel</button><button class="btn btn-primary" onclick="createPortfolio()">Create</button></div>
+  </div>
+</div>
+
+<!-- COLUMN MAP -->
+<div class="modal-overlay" id="modal-map">
+  <div class="modal">
+    <div class="modal-title">Column Mapping</div>
+    <div class="modal-sub">Map your CSV columns to FolioTrack fields</div>
+    <div id="modal-map-content"><div class="notice notice-info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><div class="notice-text">Upload a CSV first. If the format isn't recognised, this tool appears automatically.</div></div></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('modal-map')">Close</button></div>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ============================================================
+// FIREBASE
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyAEHRUP-jv61iCkL4ENQy8OKiTHCY6HGxM",
+  authDomain: "foliotrack-ff2a3.firebaseapp.com",
+  projectId: "foliotrack-ff2a3",
+  storageBucket: "foliotrack-ff2a3.firebasestorage.app",
+  messagingSenderId: "311313876961",
+  appId: "1:311313876961:web:fdd942bb0d5ada62b834a0"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ============================================================
+// STATE
+// ============================================================
+let portfolios = [{ id: 'main', name: 'Main Portfolio' }];
+let currentPortfolioId = 'main';
+let data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[] };
+let selectedTradeIds = new Set();
+let pendingBroker = null;
+let tradeFilterMode = 'all';
+let posFilterMode = 'all';
+
+function getFilterDates() {
+  const from = $('date-from')?.value;
+  const to = $('date-to')?.value;
+  return {
+    from: from ? new Date(from) : null,
+    to: to ? new Date(to + 'T23:59:59') : null
+  };
+}
+
+function inFilterRange(dateStr) {
+  const {from, to} = getFilterDates();
+  if(!from && !to) return true;
+  const d = new Date(dateStr);
+  if(from && d < from) return false;
+  if(to && d > to) return false;
+  return true;
+}
+
+function pd() { return data; } // shorthand
+
+// ============================================================
+// FIREBASE SYNC
+// ============================================================
+async function load() {
+  sync('syncing','Syncing...');
+  try {
+    // Load portfolios list
+    const pDoc = await db.collection('foliotrack').doc('portfolios').get();
+    if (pDoc.exists && pDoc.data().list) {
+      portfolios = pDoc.data().list;
+    } else {
+      await db.collection('foliotrack').doc('portfolios').set({ list: portfolios });
+    }
+    await loadPortfolio(currentPortfolioId);
+    renderPortfolioSelector();
+    sync('ok','Connected');
+    renderAll();
+  } catch(e) {
+    sync('error','Offline');
+    toast('Could not connect to Firebase','error');
+  }
+}
+
+async function loadPortfolio(id) {
+  const doc = await db.collection('foliotrack').doc('portfolio_' + id).get();
+  if (doc.exists) {
+    const d = doc.data();
+    data.trades = d.trades || [];
+    data.dividends = d.dividends || [];
+    data.imports = d.imports || [];
+    data.snapshots = d.snapshots || [];
+    data.pairs = d.pairs || [];
+    data.fxRates = d.fxRates || {};
+    data.pendingMatches = d.pendingMatches || [];
+  } else {
+    data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[] };
+  }
+}
+
+async function save() {
+  sync('syncing','Saving...');
+  try {
+    await db.collection('foliotrack').doc('portfolio_' + currentPortfolioId).set({
+      trades: data.trades, dividends: data.dividends, imports: data.imports,
+      snapshots: data.snapshots.slice(-20), pairs: data.pairs,
+      fxRates: data.fxRates, pendingMatches: data.pendingMatches,
+      updatedAt: new Date().toISOString()
+    });
+    await db.collection('foliotrack').doc('portfolios').set({ list: portfolios });
+    sync('ok','Saved');
+    setTimeout(()=>sync('ok','Connected'),2000);
+  } catch(e) { sync('error','Save failed'); toast('Save failed','error'); }
+}
+
+function sync(state, text) {
+  const dot = $('sync-dot'), txt = $('sync-text');
+  dot.className = 'sync-dot' + (state==='syncing'?' syncing':state==='error'?' error':'');
+  txt.textContent = text;
+}
+
+// ============================================================
+// PORTFOLIOS
+// ============================================================
+function togglePortfolioDropdown() {
+  $('portfolio-dropdown').classList.toggle('open');
+}
+
+function renderPortfolioSelector() {
+  const cur = portfolios.find(p => p.id === currentPortfolioId) || portfolios[0];
+  $('current-portfolio-name').textContent = cur ? cur.name : 'Portfolio';
+  $('portfolio-list').innerHTML = portfolios.map(p => `
+    <div class="portfolio-item ${p.id===currentPortfolioId?'active':''}" onclick="switchPortfolio('${p.id}')">
+      ${p.id===currentPortfolioId?'<div class="portfolio-item-dot"></div>':'<div style="width:6px;"></div>'}
+      <span style="flex:1;">${p.name}</span>
+      ${portfolios.length>1?`<span onclick="event.stopPropagation();deletePortfolio('${p.id}')" style="color:var(--text3);font-size:11px;padding:2px 5px;border-radius:4px;cursor:pointer;" title="Delete">✕</span>`:''}
+    </div>`).join('');
+}
+
+async function switchPortfolio(id) {
+  currentPortfolioId = id;
+  $('portfolio-dropdown').classList.remove('open');
+  sync('syncing','Loading...');
+  await loadPortfolio(id);
+  renderPortfolioSelector();
+  sync('ok','Connected');
+  renderAll();
+  toast(`Switched to ${portfolios.find(p=>p.id===id)?.name}`,'info');
+}
+
+async function createPortfolio() {
+  const name = $('new-portfolio-name').value.trim();
+  if (!name) return;
+  const id = 'p_' + genId();
+  portfolios.push({ id, name });
+  closeModal('modal-new-portfolio');
+  $('new-portfolio-name').value = '';
+  await switchPortfolio(id);
+}
+
+async function deletePortfolio(id) {
+  if (portfolios.length <= 1) { toast('Cannot delete last portfolio','error'); return; }
+  if (!confirm('Delete this portfolio and all its data?')) return;
+  portfolios = portfolios.filter(p => p.id !== id);
+  await db.collection('foliotrack').doc('portfolio_' + id).delete();
+  if (currentPortfolioId === id) await switchPortfolio(portfolios[0].id);
+  else { await save(); renderPortfolioSelector(); }
+}
+
+// ============================================================
+// FX
+// ============================================================
+async function fx(currency, date) {
+  if (currency === 'GBP') return 1;
+  const key = `${currency}_${date}`;
+  if (data.fxRates[key]) return data.fxRates[key];
+  try {
+    const base = currency === 'USDT' ? 'USD' : currency;
+    // Use frankfurter API
+    const res = await fetch(`https://api.frankfurter.app/${date}?from=${base}&to=GBP`);
+    if(res.ok) {
+      const d = await res.json();
+      const rate = d.rates?.GBP || null;
+      if(rate) { data.fxRates[key] = rate; return rate; }
+    }
+  } catch(e) {}
+  // Fallback: use approximate current rates
+  const fallbacks = {'USD':0.79,'USDT':0.79,'EUR':0.86,'GBP':1};
+  return fallbacks[currency] || 0.79;
+}
+
+async function loadLiveFX() {
+  // Try multiple CORS-friendly APIs
+  const apis = [
+    'https://open.er-api.com/v6/latest/USD',
+    'https://api.exchangerate-api.com/v4/latest/USD'
+  ];
+  for(const api of apis) {
+    try {
+      const res = await fetch(api);
+      if(!res.ok) continue;
+      const d = await res.json();
+      const rates = d.rates || d.conversion_rates;
+      if(rates?.GBP) {
+        const usdGBP = rates.GBP.toFixed(4);
+        $('fx-usd').textContent = usdGBP;
+        $('fx-usdt').textContent = usdGBP;
+        // EUR/GBP = GBP/EUR inverted
+        if(rates.EUR) $('fx-eur').textContent = (rates.GBP/rates.EUR).toFixed(4);
+        return;
+      }
+    } catch(e) {}
+  }
+}
+
+async function updateFxHint() {
+  const cur = $('t-currency').value;
+  const date = $('t-date').value || today();
+  if (cur === 'GBP') { $('t-fx-hint').textContent = ''; return; }
+  const rate = await fx(cur, date);
+  $('t-fx-hint').textContent = `FX on ${date}: 1 ${cur} = £${rate.toFixed(4)}`;
+}
+
+// ============================================================
+// CSV PARSING
+// ============================================================
+function detectBroker(headers) {
+  const h = headers.map(x => (x||'').toLowerCase().trim().replace(/[^a-z0-9]/g,''));
+  if (h.includes('buysell') || (h.includes('symbol') && h.includes('tradeprice'))) return 'IBKR';
+  if (h.includes('userid') && h.includes('utctime')) return 'Binance';
+  if (h.includes('type') && h.includes('asset') && h.some(x=>x.includes('walletbalance'))) return 'Bybit';
+  if (h.includes('tradedate') && h.includes('reference') && h.includes('description') && h.some(x=>x.includes('unitcost'))) return 'HL';
+  if (h.includes('portfoliosummary')) return 'HL'; // HL preamble
+  if (h.includes('pair') && h.includes('direction') && h.some(x=>x.includes('filledprice')||x.includes('avgprice')||x.includes('price'))) return 'Bitget';
+  if (h.some(x=>x.includes('tradingpair')) && h.some(x=>x.includes('orderid')||x.includes('orderno'))) return 'BingX';
+  if (h.includes('positionid') && h.some(x=>x.includes('openingprice'))) return 'Capital.com';
+  return null;
+}
+
+function parseBroker(text, hint) {
+  _importSeen = new Set();
+  // IBKR: detect by content
+  if (hint==='IBKR' || text.includes('Transaction History') || text.includes('Statement,Header')) {
+    const rows = parseCSV(text);
+    return parseIBKR(rows);
+  }
+  // HL: detect by content — must check before generic CSV parsing
+  if (hint==='HL' || text.includes('Portfolio Summary') || text.includes('Unit cost (p)') || text.includes('Trade date,Settle date')) {
+    return parseHL(text);
+  }
+  // Bitget Futures CSV detection — has Direction column with Open/Close long/short
+  if(hint==='BitgetFutures' || (text.includes('Close long') || text.includes('Close short') || text.includes('Open long') || text.includes('Open short')) && text.includes('Futures')) {
+    return parseBitgetFuturesCSV(text);
+  }
+  // BingX & Bitget: Excel files — handled separately via processFileExcel
+  // For CSV brokers
+  const rows = parseCSV(text);
+  if (!rows.length) return { trades:[], dividends:[], broker:null, error:'Empty file' };
+  const headers = rows[0];
+  const broker = hint || detectBroker(headers);
+  if (!broker) return { trades:[], dividends:[], broker:null, error:'unrecognised', headers };
+  const trades=[], dividends=[];
+  for (let i=1;i<rows.length;i++) {
+    const row=rows[i];
+    if (row.length<3||!row[0]) continue;
+    const obj={};
+    headers.forEach((h,idx)=>obj[(h||'').trim()||idx]=row[idx]||'');
+    const t = mapTrade(obj, broker);
+    if (t) {
+      if(t._isDividend){ dividends.push(t); }
+      else {
+        const dk=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`;
+        if(!_importSeen.has(dk)){ _importSeen.add(dk); trades.push(t); }
+      }
+    }
+  }
+  return { trades, dividends, broker, error:null };
+}
+
+function parseHL(text) {
+  const trades=[], dividends=[];
+  const lines = text.split(/\r?\n/);
+  // Find header line index
+  let headerIdx = -1;
+  for(let i=0;i<lines.length;i++) {
+    const clean = lines[i].replace(/\r/g,'').toLowerCase();
+    if(clean.includes('trade date')) { headerIdx=i; break; }
+  }
+  if(headerIdx===-1) return {trades:[],dividends:[],broker:'HL',error:'Header not found'};
+
+  const skipRefs = ['manage fee','reg. saver','transfer','regular saver','adjustment','interest'];
+
+  for(let i=headerIdx+1;i<lines.length;i++) {
+    const line=lines[i].replace(/\r/g,'').trim();
+    if(!line) continue;
+    const cols=parseCSVLine(line);
+    if(cols.length<6) continue;
+
+    const dateStr=(cols[0]||'').trim();
+    const ref=(cols[2]||'').trim();
+    const desc=(cols[3]||'').trim();
+    const priceStr=(cols[4]||'').trim();
+    const qtyStr=(cols[5]||'').trim();
+
+    if(!ref||!dateStr) continue;
+    if(skipRefs.some(s=>ref.toLowerCase().includes(s))) continue;
+    if(ref.toUpperCase()==='INTEREST') continue;
+
+    const isBuy=ref.startsWith('B');
+    const isSell=ref.startsWith('S');
+    if(!isBuy&&!isSell) continue;
+    if(!desc) continue;
+    if(priceStr==='n/a'||qtyStr==='n/a'||!priceStr||!qtyStr) continue;
+
+    const priceP=parseFloat(priceStr.replace(/[£,\s]/g,''))||0;
+    if(!priceP) continue;
+    const priceGBP=+(priceP/100).toFixed(6);
+    const qty=Math.abs(parseFloat(qtyStr.replace(/,/g,''))||0);
+    if(!qty) continue;
+
+    const date=parseDateDMY(dateStr);
+    // Remove "qty @ price" suffix to get clean name — keep FULL name, no truncation
+    const cleanDesc=desc.replace(/\s+[\d,]+\.?\d*\s*@.*/,'').trim();
+    const dk=`${date}_${cleanDesc}_${qty}_${priceGBP}_${isBuy?'buy':'sell'}`;
+    if(_importSeen.has(dk)) continue;
+    _importSeen.add(dk);
+
+    trades.push({
+      id:genId(),type:isBuy?'buy':'sell',
+      asset:cleanDesc,
+      description:cleanDesc,
+      broker:'HL',date,qty,
+      price:priceGBP,currency:'GBP',
+      priceGBP,valueGBP:+(qty*priceGBP).toFixed(2),fxRate:1,
+      side:'Long',leverage:1,fees:0,feesGBP:0,
+      class:'Stock/ETF',notes:'',tags:[],
+      sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null
+    });
+  }
+  return {trades, dividends, broker:'HL', error:null};
+}
+
+// Date parser for British D/M/YY or DD/MM/YYYY format (HL)
+function parseDateDMY(str) {
+  if(!str) return today();
+  str = str.trim();
+  // DD/MM/YYYY or D/M/YY or D/M/YYYY
+  const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if(m) {
+    const d = m[1].padStart(2,'0');
+    const mo = m[2].padStart(2,'0');
+    const y = m[3].length===2 ? '20'+m[3] : m[3];
+    return `${y}-${mo}-${d}`;
+  }
+  const dt = new Date(str);
+  if(!isNaN(dt)) return dt.toISOString().split('T')[0];
+  return today();
+}
+
+function parseBitgetFuturesCSV(text) {
+  const trades=[];
+  const rows=parseCSV(text);
+  if(!rows.length) return {trades:[],dividends:[],broker:'Bitget',error:'Empty'};
+  const headers=rows[0].map(h=>(h||'').trim());
+  for(let i=1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row[0]) continue;
+    const obj={};
+    headers.forEach((h,idx)=>obj[h]=(row[idx]||'').trim());
+    const t=mapBitgetFutures(obj);
+    if(t){
+      const dk=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`;
+      if(!_importSeen.has(dk)){_importSeen.add(dk);trades.push(t);}
+    }
+  }
+  return {trades,dividends:[],broker:'Bitget',error:null};
+}
+
+function parseCSVLine(line) {
+  const cols=[]; let inQ=false, cell='';
+  for(let i=0;i<line.length;i++) {
+    const c=line[i];
+    if(c==='"'){inQ=!inQ;}
+    else if(c===','&&!inQ){cols.push(cell.trim());cell='';}
+    else{cell+=c;}
+  }
+  cols.push(cell.trim());
+  return cols;
+}
+
+function parseCSV(text) {
+  return text.split('\n').filter(l=>l.trim()).map(line => {
+    const row=[]; let inQ=false, cell='';
+    for (let i=0;i<line.length;i++) {
+      const c=line[i];
+      if(c==='"'){inQ=!inQ;}
+      else if(c===','&&!inQ){row.push(cell.trim());cell='';}
+      else{cell+=c;}
+    }
+    row.push(cell.trim()); return row;
+  });
+}
+
+// Master dedupe set — cleared per import
+let _importSeen = new Set();
+
+// Parse Excel files (BingX, Bitget) using SheetJS loaded from CDN
+async function parseBrokerExcel(arrayBuffer, hint) {
+  _importSeen = new Set();
+  // Dynamically load SheetJS if not present
+  if(!window.XLSX) {
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload=res; s.onerror=rej;
+      document.head.appendChild(s);
+    });
+  }
+  const wb = XLSX.read(arrayBuffer, {type:'array', cellDates:true});
+  const trades=[], dividends=[];
+  let broker = hint;
+
+  if(hint==='BingX') {
+    // Process Spot_Account sheet
+    const spotSheet = wb.Sheets['Spot_Account'];
+    if(spotSheet) {
+      const rows = XLSX.utils.sheet_to_json(spotSheet);
+      for(const obj of rows) {
+        const t = mapBingXSpot(obj);
+        if(t) { const dk=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`; if(!_importSeen.has(dk)){_importSeen.add(dk);trades.push(t);} }
+      }
+    }
+    // Process USDⓢ_M_Perpetual_Futures sheet
+    const futSheet = wb.Sheets['USDⓢ_M_Perpetual_Futures'] || wb.Sheets['USD_M_Perpetual_Futures'];
+    if(futSheet) {
+      const rows = XLSX.utils.sheet_to_json(futSheet);
+      for(const obj of rows) {
+        const t = mapBingXFutures(obj);
+        if(t) { const dk=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`; if(!_importSeen.has(dk)){_importSeen.add(dk);trades.push(t);} }
+      }
+    }
+  }
+  else if(hint==='Bitget') {
+    // Spot: first sheet
+    const spotSheet = wb.Sheets[wb.SheetNames[0]];
+    if(spotSheet) {
+      const rows = XLSX.utils.sheet_to_json(spotSheet);
+      for(const obj of rows) {
+        const t = mapBitgetSpot(obj);
+        if(t) { const dk=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`; if(!_importSeen.has(dk)){_importSeen.add(dk);trades.push(t);} }
+      }
+    }
+  }
+  else if(hint==='BitgetFutures') {
+    broker='Bitget';
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    if(sheet) {
+      const rows = XLSX.utils.sheet_to_json(sheet);
+      for(const obj of rows) {
+        const t = mapBitgetFutures(obj);
+        if(t) { const dk=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`; if(!_importSeen.has(dk)){_importSeen.add(dk);trades.push(t);} }
+      }
+    }
+  }
+  return { trades, dividends, broker, error:null };
+}
+
+function mapBingXSpot(obj) {
+  const type=(obj['Type']||'').trim().toLowerCase();
+  if(type!=='buy'&&type!=='sell') return null;
+  const pair=(obj['Pair']||'').trim();
+  const asset=pair.split('/')[0]||pair;
+  const qty=Math.abs(parseFloat(obj['Amount'])||0);
+  const price=parseFloat(obj['Price'])||0;
+  const date=parseDateISO(obj['Time(UTC+8)']||obj['Time']||'');
+  const fees=Math.abs(parseFloat(obj['Fee'])||0);
+  if(!asset||!qty) return null;
+  return {id:genId(),type,asset:asset.toUpperCase(),description:pair,broker:'BingX',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees,feesGBP:0,class:'Crypto',notes:'',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null};
+}
+
+function mapBingXFutures(obj) {
+  const type=(obj['Type']||'').trim();
+  // Only process Close trades — they have PNL
+  if(!type.toLowerCase().includes('close')) return null;
+  const isLong=type.toLowerCase().includes('long');
+  const pair=(obj['Pair']||'').trim();
+  const asset=pair.replace('-USDT','').replace('/USDT','');
+  const qty=Math.abs(parseFloat(obj['Quantity'])||0);
+  const price=parseFloat(obj['DealPrice']||obj['AvgPrice']||0);
+  const date=parseDateISO(obj['Time(UTC+8)']||obj['Time']||'');
+  const fees=Math.abs(parseFloat(obj['Fee'])||0);
+  const pnlRaw=parseFloat(obj['Realized PNL']||obj['Realized PnL']||0);
+  const leverage=parseInt(obj['Leverage'])||1;
+  if(!asset||!qty) return null;
+  // Close long = sell, Close short = buy (closing a short)
+  const tradeType = isLong ? 'sell' : 'buy';
+  const t = {id:genId(),type:tradeType,asset:asset.toUpperCase(),description:pair,broker:'BingX',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:isLong?'Long':'Short',leverage,fees,feesGBP:0,class:'Crypto',notes:'Futures',tags:['futures'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null,_rawPnlUSDT:pnlRaw};
+  return t;
+}
+
+function mapBitgetSpot(obj) {
+  const status=(obj['Status']||'').toLowerCase();
+  if(!status.includes('fully executed')) return null;
+  const dir=(obj['Direction']||'').trim().toLowerCase();
+  if(dir!=='buy'&&dir!=='sell') return null;
+  const pair=(obj['Trading pair']||obj['Pair']||'').trim();
+  const base=(obj['Base Asset']||pair.split('/')[0]||pair).trim();
+  // Use Average Price and Trading volume (actual executed values)
+  const qty=Math.abs(parseFloat(obj['Executed']||obj['Trading volume']||obj['Order amount'])||0);
+  const price=parseFloat(obj['Average Price']||obj['Price']||0);
+  const dateStr=obj['Date']||'';
+  const date=parseDateMDY(dateStr);
+  if(!base||!qty||!price) return null;
+  return {id:genId(),type:dir,asset:base.toUpperCase(),description:pair,broker:'Bitget',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees:0,feesGBP:0,class:'Crypto',subclass:'Spot',notes:'',tags:['spot'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null};
+}
+
+function mapBitgetFutures(obj) {
+  const status=(obj['Status']||'').toLowerCase();
+  if(!status.includes('fully executed')) return null;
+  const dir=(obj['Direction']||'').trim().toLowerCase();
+  if(!dir.includes('close')) return null;
+  const isLong=dir.includes('long');
+  const futures=(obj['Futures']||'').trim();
+  const asset=futures.replace(/USDT$/,'').trim();
+  // Use Trading volume (executed qty) and Average Price
+  const qty=Math.abs(parseFloat(obj['Trading volume']||obj['Executed']||0));
+  const price=parseFloat(obj['Average Price']||0);
+  const dateStr=obj['Date']||'';
+  const date=parseDateMDY(dateStr);
+  const pnlRaw=parseFloat(obj['Realized P/L']||obj['NetProfits']||0);
+  if(!asset||!qty) return null;
+  // Close long = selling a long = sell type
+  // Close short = buying back a short = buy type
+  const tradeType=isLong?'sell':'buy';
+  return {id:genId(),type:tradeType,asset:asset.toUpperCase(),description:futures,broker:'Bitget',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:isLong?'Long':'Short',leverage:1,fees:0,feesGBP:0,class:'Crypto',subclass:'Futures',notes:'Futures',tags:['futures'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null,_rawPnlUSDT:pnlRaw};
+}
+
+// Date parsers for specific formats
+function parseDateISO(str) {
+  if(!str) return today();
+  // ISO format: 2026-01-06T20:07:37.000+08:00
+  const d = new Date(str);
+  if(!isNaN(d)) return d.toISOString().split('T')[0];
+  return today();
+}
+
+function parseDateMDY(str) {
+  if(!str) return today();
+  // Format: 5/4/26 17:12 or 5/4/2026 17:12
+  const m = str.toString().match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(m) {
+    const y = m[3].length===2 ? '20'+m[3] : m[3];
+    return `${y}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  }
+  const d = new Date(str);
+  if(!isNaN(d)) return d.toISOString().split('T')[0];
+  return today();
+}
+
+function parseIBKR(rows) {
+  const trades=[], dividends=[];
+  let headers=[];
+  let divHeaders=[];
+  let foundTradeHeader=false;
+  let foundDivHeader=false;
+  let currentSection='';
+  const validTrades=['Buy','Sell','BUY','SELL'];
+  const seen=new Set();
+
+  for (const row of rows) {
+    if(!row[0]) continue;
+    const section=(row[0]||'').trim();
+    const rowType=(row[1]||'').trim();
+
+    // Track current section
+    if(rowType==='Header') currentSection=section;
+
+    // Transaction History / Trades section
+    if((section==='Transaction History'||section==='Trades')&&rowType==='Header'){
+      headers=row.slice(2).map(h=>(h||'').trim());
+      foundTradeHeader=true; continue;
+    }
+    if((section==='Transaction History'||section==='Trades')&&rowType==='Data'&&foundTradeHeader&&headers.length){
+      const obj={};
+      headers.forEach((h,i)=>obj[h]=(row[i+2]||'').trim());
+      const txType=(obj['Transaction Type']||'').trim();
+      const symbol=(obj['Symbol']||'').trim();
+      const dateStr=(obj['Date']||'').trim();
+      const currency=(obj['Price Currency']||'USD').trim();
+      const qty=parseFloat(obj['Quantity'])||0;
+      const price=parseFloat(obj['Price'])||0;
+      const comm=Math.abs(parseFloat(obj['Commission'])||0);
+
+      // Handle dividends within transaction history
+      if(txType==='Dividends'||txType==='Dividend') {
+        const gross=Math.abs(parseFloat(obj['Gross Amount']||obj['Amount']||0));
+        if(gross>0) dividends.push({id:genId(),asset:symbol||(obj['Description']||'').split('(')[0].trim(),date:parseDate(dateStr),gross,wht:Math.abs(parseFloat(obj['Commission']||0)),currency,broker:'IBKR',valueGBP:null,fxRate:1});
+        continue;
+      }
+
+      if(!txType||!validTrades.includes(txType)) continue;
+      if(!symbol||symbol==='-'||symbol.includes('.')) continue;
+      if(!Math.abs(qty)||!price) continue;
+      const dedupeKey=`${dateStr}_${symbol}_${Math.abs(qty)}_${price}_${txType}`;
+      if(seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      const isBuy=txType==='Buy'||txType==='BUY';
+      trades.push({id:genId(),type:isBuy?'buy':'sell',asset:symbol.toUpperCase(),description:obj['Description']||symbol,broker:'IBKR',date:parseDate(dateStr),qty:Math.abs(qty),price,currency,priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees:comm,feesGBP:0,class:'Stock/ETF',notes:'',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null});
+    }
+
+    // Separate Dividends section (some IBKR exports have this)
+    if(section==='Dividends'&&rowType==='Header'){
+      divHeaders=row.slice(2).map(h=>(h||'').trim());
+      foundDivHeader=true; continue;
+    }
+    if(section==='Dividends'&&rowType==='Data'&&foundDivHeader&&divHeaders.length){
+      const obj={};
+      divHeaders.forEach((h,i)=>obj[h]=(row[i+2]||'').trim());
+      const gross=Math.abs(parseFloat(obj['Amount']||obj['Gross Amount']||0));
+      const currency=obj['Currency']||'USD';
+      const dateStr=obj['Date']||'';
+      const desc=obj['Description']||'';
+      if(gross>0) dividends.push({id:genId(),asset:desc.split('(')[0].trim()||desc.split(' ')[0],date:parseDate(dateStr),gross,wht:0,currency,broker:'IBKR',valueGBP:null,fxRate:1});
+    }
+  }
+  return { trades, dividends, broker:'IBKR', error:null };
+}
+
+function mapTrade(obj, broker) {
+  try {
+    let type,asset,description='',date,qty,price,currency,side='Long',leverage=1,fees=0,cls='Crypto';
+    if(broker==='Binance'){
+      const op=(obj['Operation']||'').toLowerCase();
+      if(op==='dividends'||op==='distribution'){
+        return {id:genId(),asset:obj['Coin']||'',date:parseDate(obj['UTC_Time']||''),gross:Math.abs(parseFloat(obj['Change']||0)),wht:0,currency:'USDT',broker:'Binance',valueGBP:null,_isDividend:true};
+      }
+      if(!['buy','sell','transaction related'].includes(op))return null;
+      type=op==='sell'?'sell':'buy';asset=obj['Coin']||'';
+      qty=Math.abs(parseFloat(obj['Change']||0));if(!qty)return null;
+      date=parseDate(obj['UTC_Time']||'');price=0;currency='USDT';cls='Crypto';
+    } else if(broker==='Bybit'){
+      const t=(obj['Type']||obj['type']||'').toLowerCase();
+      if(!t.includes('buy')&&!t.includes('sell')&&!t.includes('trade'))return null;
+      type=t.includes('sell')?'sell':'buy';asset=obj['Asset']||obj['Coin']||'';
+      qty=Math.abs(parseFloat(obj['Amount']||obj['Qty']||0));
+      price=parseFloat(obj['Price']||0);date=parseDate(obj['Time']||obj['Date']||'');currency='USDT';cls='Crypto';
+    } else if(broker==='HL'){
+      // HL CSV: header is on row 5 (0-indexed row 4), data starts row 6
+      // Reference: starts with B = Buy, S = Sell, others = skip
+      const ref=(obj['Reference']||'').trim();
+      if(!ref.startsWith('B')&&!ref.startsWith('S')) return null;
+      // Skip management fees, transfers, regular savers
+      const skipRefs=['MANAGE FEE','REG. SAVER','Transfer','TRANSFER'];
+      if(skipRefs.some(s=>ref.toUpperCase().includes(s.toUpperCase()))) return null;
+      type=ref.startsWith('S')?'sell':'buy';
+      // Extract asset name and quantity from Description
+      // Description format: "FULL NAME qty @ price"
+      const desc=(obj['Description']||'').trim();
+      if(!desc) return null;
+      // Check for dividend
+      if(desc.toLowerCase().includes('dividend')||desc.toLowerCase().includes('income distribution')) {
+        const grossAmt=Math.abs(parseFloat((obj['Value (£)']||obj['Value']||'0').toString().replace(/[^0-9.-]/g,''))||0);
+        return {id:genId(),asset:desc.split(' ')[0].toUpperCase(),date:parseDate(obj['Trade date']||obj['Date']||''),gross:grossAmt,wht:0,currency:'GBP',broker:'HL',valueGBP:grossAmt,_isDividend:true};
+      }
+      // Price is in PENCE — divide by 100 to get GBP
+      const priceRaw=parseFloat((obj['Unit cost (p)']||obj['Price']||'0').toString().replace(/[^0-9.]/g,''))||0;
+      price = priceRaw / 100; // pence to GBP
+      qty=Math.abs(parseFloat((obj['Quantity']||obj['Shares']||'0').toString().replace(/,/g,''))||0);
+      // Extract asset symbol from description (first word usually)
+      // Description: "iShares V plc S&P... ETF 95 @ 2546.36" — use Reference as better ID
+      asset = ref; // Use reference number as fallback, description first word better
+      // Try to get a cleaner name — take description up to the qty
+      const dParts = desc.split(/\s+\d+\s+@/);
+      description = dParts[0] || desc;
+      asset = description.split(' ').slice(0,3).join(' ').substring(0,20);
+      date=parseDate(obj['Trade date']||obj['Date']||'');
+      currency='GBP';
+      // Classify: ETF/ETC/Fund/Trust = Stock/ETF
+      cls='Stock/ETF';
+      if(!qty||!price) return null;
+    } else if(broker==='Bitget'){
+      // Bitget Spot CSV format
+      const status=(obj['Status']||'').toLowerCase();
+      if(status&&!status.includes('fully executed')) return null;
+      const dir=(obj['Direction']||obj['Side']||obj['side']||'').trim().toLowerCase();
+      if(dir!=='buy'&&dir!=='sell') return null;
+      type=dir;
+      const pair=obj['Trading pair']||obj['Pair']||obj['Symbol']||'';
+      const base=(obj['Base Asset']||pair.split('/')[0]||pair).trim();
+      asset=base;
+      // Use executed qty and average price
+      qty=Math.abs(parseFloat(obj['Executed']||obj['Trading volume']||obj['Amount']||obj['Qty']||0));
+      price=parseFloat(obj['Average Price']||obj['Price']||obj['Filled Price']||0);
+      date=parseDateMDY(obj['Date']||obj['Time']||'');
+      currency='USDT';cls='Crypto';
+      fees=Math.abs(parseFloat(obj['Fee']||0));
+      if(!qty||!price) return null;
+    } else if(broker==='BingX'){
+      const type_=(obj['Type']||obj['Direction']||obj['Side']||'').trim().toLowerCase();
+      if(type_!=='buy'&&type_!=='sell') return null;
+      type=type_;
+      const pair=obj['Pair']||obj['Trading Pair']||'';
+      asset=pair.split('/')[0]||pair;
+      qty=Math.abs(parseFloat(obj['Amount']||obj['Filled Amount']||0));
+      price=parseFloat(obj['Price']||obj['Avg Price']||0);
+      date=parseDateISO(obj['Time(UTC+8)']||obj['Time']||obj['Date']||'');
+      currency='USDT';cls='Crypto';
+      fees=Math.abs(parseFloat(obj['Fee']||0));
+    } else if(broker==='Capital.com'){
+      const action=(obj['Action']||'').toLowerCase();
+      if(!action.includes('open')&&!action.includes('close'))return null;
+      type=action.includes('open')?'buy':'sell';asset=obj['Market']||'';
+      qty=Math.abs(parseFloat(obj['Size']||0));
+      price=parseFloat(type==='buy'?(obj['Opening price']||0):(obj['Closing price']||0));
+      date=parseDate(obj['Date']||'');currency='GBP';cls='Stock/ETF';
+    } else return null;
+    if(!asset||!qty)return null;
+    return {id:genId(),type,asset:asset.toUpperCase(),description:description||asset.toUpperCase(),broker,date,qty,price,currency,priceGBP:null,valueGBP:null,fxRate:null,side,leverage,fees,class:cls,notes:'',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null};
+  } catch(e){return null;}
+}
+
+function parseDate(str) {
+  if(!str)return today();
+  const d=new Date(str);
+  if(!isNaN(d))return d.toISOString().split('T')[0];
+  const m=str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if(m){const y=m[3].length===2?'20'+m[3]:m[3];return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;}
+  return today();
+}
+
+// ============================================================
+// FILE HANDLING
+// ============================================================
+function triggerImport(){pendingBroker=null;$('csv-input').click();}
+function triggerFileFor(b){pendingBroker=b;$('csv-input').click();}
+function handleFile(e){const f=e.target.files[0];if(f)processFile(f,pendingBroker);e.target.value='';}
+
+function isExcelFile(file) {
+  return file.name.endsWith('.xlsx')||file.name.endsWith('.xls')||
+    file.type==='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'||
+    file.type==='application/vnd.ms-excel';
+}
+
+async function processFile(file, hint) {
+  toast(`Reading ${file.name}...`,'info');
+  let result;
+
+  // Only use filename hint for Excel-based brokers (BingX, Bitget)
+  const fname = file.name.toLowerCase();
+  if(!hint) {
+    if(fname.includes('bingx')||fname.includes('bing_x')) hint='BingX';
+    else if(fname.includes('bitget') && fname.includes('futures')) hint='BitgetFutures';
+    else if(fname.includes('bitget')) hint='Bitget';
+  }
+
+  // Check if file is actually Excel by magic bytes
+  const ab = await file.arrayBuffer();
+  const magic = new Uint8Array(ab.slice(0,4));
+  const isPK = magic[0]===0x50&&magic[1]===0x4B; // ZIP/XLSX
+  const isCFB = magic[0]===0xD0&&magic[1]===0xCF; // XLS
+
+  if((isPK||isCFB) && (hint==='BingX'||hint==='Bitget'||hint==='BitgetFutures')) {
+    // Excel file for BingX or Bitget
+    result = await parseBrokerExcel(ab, hint);
+  } else {
+    // All other files: read as text, detect by content
+    let text;
+    try {
+      text = new TextDecoder('utf-8', {fatal:true}).decode(ab);
+    } catch(e) {
+      text = new TextDecoder('iso-8859-1').decode(ab);
+    }
+    result = parseBroker(text, hint);
+  }
+
+  if(result.error==='unrecognised'){showMapper(result.headers);return;}
+  if(!result.trades.length&&!result.dividends.length){toast('No trades found in this file. Check format or try selecting broker manually.','error');return;}
+  await snapshot(`Before import: ${file.name}`);
+  toast(`Processing ${result.trades.length} trades, fetching FX rates...`,'info');
+
+  // Dedupe against existing trades in DB
+  const existingKeys = new Set(data.trades.map(t=>`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`));
+  const newTrades = result.trades.filter(t=>{
+    const k=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`;
+    if(existingKeys.has(k)) return false;
+    existingKeys.add(k);
+    return true;
+  });
+  const skipped = result.trades.length - newTrades.length;
+
+  // Enrich trades with FX
+  for(const t of newTrades){
+    if(t.currency!=='GBP'&&t.price&&t.date){
+      t.fxRate=await fx(t.currency,t.date);
+      t.priceGBP=+(t.price*t.fxRate).toFixed(6);
+      t.valueGBP=+(t.qty*t.priceGBP).toFixed(2);
+      t.feesGBP=t.fees?+(t.fees*t.fxRate).toFixed(2):0;
+    } else {t.fxRate=1;t.priceGBP=t.price;t.valueGBP=+(t.qty*(t.price||0)).toFixed(2);t.feesGBP=t.fees||0;}
+    // For futures with raw PNL in USDT, convert to GBP
+    if(t._rawPnlUSDT&&t.fxRate){
+      t.pnlGBP=+(t._rawPnlUSDT*t.fxRate).toFixed(2);
+      t.matchedTo='futures';
+    }
+  }
+
+  // Enrich dividends
+  for(const d of result.dividends){
+    if(d.currency!=='GBP'&&d.gross&&d.date){
+      const rate=await fx(d.currency,d.date);
+      d.valueGBP=+(d.gross*rate).toFixed(2);d.fxRate=rate;
+    } else {d.valueGBP=d.gross;d.fxRate=1;}
+  }
+
+  data.trades.push(...newTrades);
+  data.trades.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  data.dividends.push(...result.dividends);
+  data.imports.push({id:genId(),date:today(),broker:result.broker,filename:file.name,trades:newTrades.length,dividends:result.dividends.length,skipped,status:'done'});
+
+  // Auto-match all sells
+  autoMatchAll();
+  await save();
+  renderAll();
+  const msg = skipped>0 ? `✓ ${newTrades.length} trades imported, ${skipped} duplicates skipped` : `✓ ${newTrades.length} trades imported from ${result.broker}`;
+  toast(msg,'success');
+}
+
+function showMapper(headers) {
+  const fields=['Date','Asset','Type (buy/sell)','Quantity','Price','Currency'];
+  let html=`<div class="notice notice-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><div class="notice-text">Format not recognised. Map your columns below.</div></div>`;
+  html+=`<div style="font-size:12px;color:var(--text2);margin-bottom:11px;">Found: ${(headers||[]).map(h=>`<code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;">${h}</code>`).join(' ')}</div>`;
+  fields.forEach(f=>{
+    const id='map_'+f.replace(/[^a-z]/gi,'').toLowerCase();
+    html+=`<div class="form-group"><label class="form-label">${f}</label><select class="form-input form-select" id="${id}"><option value="">— skip —</option>${(headers||[]).map(h=>`<option value="${h}">${h}</option>`).join('')}</select></div>`;
+  });
+  $('modal-map-content').innerHTML=html;
+  openModal('modal-map');
+}
+
+// ============================================================
+// COST BASIS — FULLY AUTOMATIC
+// ============================================================
+function autoMatchAll() {
+  // Step 1: Mark futures trades (P&L already in CSV)
+  data.trades.forEach(t=>{
+    if(t._rawPnlUSDT!==undefined&&t._rawPnlUSDT!==null){
+      t.matchedTo='futures';
+    }
+  });
+
+  // Step 2: Detect Long/Short using running quantity per asset+broker
+  const sorted=[...data.trades]
+    .filter(t=>t.matchedTo!=='futures')
+    .sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+  const runQty={};
+  sorted.forEach(t=>{
+    const k=`${(t.asset||'').trim()}__${t.broker}`;
+    if(runQty[k]===undefined) runQty[k]=0;
+    const q=runQty[k];
+    if(t.type==='buy'){
+      t.side = q<0 ? 'Short' : 'Long';
+      runQty[k]=q+t.qty;
+    } else {
+      t.side = q<=0 ? 'Short' : 'Long';
+      runQty[k]=q-t.qty;
+    }
+  });
+
+  // Step 3: Only match trades not already confirmed (matchedTo is null/undefined)
+  // This preserves manually confirmed matches
+  const toMatch=[...data.trades]
+    .filter(t=>t.matchedTo!=='futures'&&!t.matchedTo)
+    .sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+  // Match Long sells
+  const longSells=toMatch.filter(t=>t.type==='sell'&&t.side==='Long');
+  for(const sell of longSells){
+    const asset=(sell.asset||'').trim();
+    const buys=[...data.trades].filter(t=>
+      t.type==='buy'&&t.side==='Long'&&
+      (t.asset||'').trim()===asset&&
+      new Date(t.date)<=new Date(sell.date)
+    );
+    if(!buys.length) continue;
+    const isStock=sell.class==='Stock/ETF';
+    if(isStock){
+      const totalQty=buys.reduce((s,b)=>s+b.qty,0);
+      const totalCost=buys.reduce((s,b)=>s+(b.valueGBP||0),0);
+      const avg=totalQty>0?totalCost/totalQty:0;
+      sell.costBasisGBP=+(sell.qty*avg).toFixed(2);
+      sell.pnlGBP=+((sell.valueGBP||0)-sell.costBasisGBP).toFixed(2);
+      sell.matchedTo='pool';
+    } else {
+      let rem=sell.qty, cost=0;
+      for(const lot of buys.sort((a,b)=>new Date(a.date)-new Date(b.date))){
+        if(rem<=0) break;
+        const used=Math.min(rem,lot.qty);
+        cost+=used*(lot.priceGBP||lot.price||0);
+        rem-=used;
+      }
+      sell.costBasisGBP=+cost.toFixed(2);
+      sell.pnlGBP=+((sell.valueGBP||0)-sell.costBasisGBP).toFixed(2);
+      sell.matchedTo=buys[0].id;
+    }
+  }
+
+  // Match Short closes (buy closes a short sell)
+  const shortBuys=toMatch.filter(t=>t.type==='buy'&&t.side==='Short');
+  for(const closeBuy of shortBuys){
+    const asset=(closeBuy.asset||'').trim();
+    const openSells=[...data.trades].filter(t=>
+      t.type==='sell'&&t.side==='Short'&&
+      (t.asset||'').trim()===asset&&
+      new Date(t.date)<=new Date(closeBuy.date)
+    ).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if(!openSells.length) continue;
+    const avgSellPriceGBP=openSells.reduce((s,t)=>s+(t.priceGBP||t.price||0),0)/openSells.length;
+    const buyPriceGBP=closeBuy.priceGBP||closeBuy.price||0;
+    closeBuy.costBasisGBP=+(closeBuy.qty*buyPriceGBP).toFixed(2);
+    closeBuy.pnlGBP=+(closeBuy.qty*(avgSellPriceGBP-buyPriceGBP)).toFixed(2);
+    closeBuy.matchedTo=openSells[0].id;
+    openSells.forEach(s=>{ if(!s.matchedTo) s.matchedTo=closeBuy.id; });
+  }
+
+  // Pending = Long sells with no match found in DB (genuinely missing history)
+  data.pendingMatches=data.trades
+    .filter(t=>t.type==='sell'&&t.side==='Long'&&!t.matchedTo&&t.matchedTo!=='futures')
+    .map(t=>t.id);
+}
+
+async function confirmAll() {
+  // Force match all pending with Share Pool
+  const pending = data.trades.filter(t=>t.type==='sell'&&data.pendingMatches.includes(t.id));
+  for(const sell of pending) {
+    const buys=data.trades.filter(t=>t.type==='buy'&&t.asset===sell.asset&&new Date(t.date)<=new Date(sell.date));
+    if(buys.length) {
+      const tq=buys.reduce((s,b)=>s+b.qty,0);
+      const tc=buys.reduce((s,b)=>s+(b.valueGBP||0),0);
+      const avg=tq>0?tc/tq:0;
+      sell.costBasisGBP=+(sell.qty*avg).toFixed(2);
+      sell.pnlGBP=+((sell.valueGBP||0)-sell.costBasisGBP).toFixed(2);
+      sell.matchedTo='pool';
+    } else {
+      // No buy found — mark as unmatched open short or missing history
+      sell.matchedTo='no-buy';
+      sell.pnlGBP=0;
+    }
+  }
+  data.pendingMatches=[];
+  await save();
+  renderAll();
+  toast(`✓ ${pending.length} trades confirmed with Share Pool`,'success');
+}
+
+function checkMatches() {
+  autoMatchAll();
+}
+
+function confirmMatch(sellId, val) {
+  const sell=data.trades.find(t=>t.id===sellId);if(!sell)return;
+  if(val==='pool'){
+    const buys=data.trades.filter(t=>t.type==='buy'&&t.asset===sell.asset&&new Date(t.date)<=new Date(sell.date));
+    const tq=buys.reduce((s,b)=>s+b.qty,0);
+    const tc=buys.reduce((s,b)=>s+(b.valueGBP||0),0);
+    const avg=tq>0?tc/tq:0;
+    sell.costBasisGBP=+(sell.qty*avg).toFixed(2);
+    sell.pnlGBP=+((sell.valueGBP||0)-sell.costBasisGBP).toFixed(2);
+    sell.matchedTo='pool';
+  } else {
+    const buy=data.trades.find(t=>t.id===val);
+    if(buy){sell.costBasisGBP=+((buy.priceGBP||buy.price)*sell.qty).toFixed(2);sell.pnlGBP=+((sell.valueGBP||0)-sell.costBasisGBP).toFixed(2);sell.matchedTo=val;}
+  }
+  data.pendingMatches=data.pendingMatches.filter(id=>id!==sellId);
+  save();renderAll();toast('Match confirmed ✓','success');
+}
+
+// ============================================================
+// COMPUTATIONS
+// ============================================================
+function getPositions() {
+  const pos={};
+  // Process all trades chronologically
+  // For Bitget/BingX Futures: only "Close" trades have _rawPnlUSDT set and matchedTo='futures'
+  // "Open" trades for futures should NOT be included as they get cancelled by the Close
+  // For everything else (IBKR stocks, BingX spot, HL, etc.) include all
+  const tradesToProcess=[...data.trades]
+    .filter(t=>{
+      // Exclude Bitget/BingX futures OPEN trades (Direction contains 'Open')
+      // These are already accounted for in the Close trade P&L
+      if((t.broker==='Bitget'||t.broker==='BingX') && t.notes==='Futures') {
+        // Only include if it's a Close (has pnlGBP from CSV)
+        // Open trades have pnlGBP=null or 0 and _rawPnlUSDT=0
+        if(t._rawPnlUSDT===0||t._rawPnlUSDT===undefined) return false;
+      }
+      return true;
+    })
+    .sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+  tradesToProcess.forEach(t=>{
+    const asset=(t.asset||'').trim();
+    const k=`${asset}__${t.broker}`;
+    if(!pos[k]) pos[k]={
+      asset, description:t.description, broker:t.broker,
+      class:t.class, subclass:t.subclass||'Spot',
+      side:'Long', totalQty:0, totalCostGBP:0,
+      openDate:t.date, sl:t.sl, tp:t.tp, tags:t.tags||[]
+    };
+    const p=pos[k];
+
+    if(t.type==='buy'){
+      if(t.side==='Short'){
+        // Closing a short
+        p.totalQty=+(p.totalQty+t.qty).toFixed(8);
+        const cpu=Math.abs(p.totalQty)>0?p.totalCostGBP/Math.abs(p.totalQty+t.qty):0;
+        p.totalCostGBP=Math.max(0,p.totalCostGBP-cpu*t.qty);
+      } else {
+        // Opening/adding to a long
+        p.totalQty=+(p.totalQty+t.qty).toFixed(8);
+        p.totalCostGBP+=(t.valueGBP||0);
+      }
+    } else {
+      if(t.side==='Short'){
+        // Opening/adding to a short
+        p.totalQty=+(p.totalQty-t.qty).toFixed(8);
+        p.totalCostGBP+=(t.valueGBP||0);
+        p.side='Short';
+      } else {
+        // Closing/reducing a long
+        const cpu=p.totalQty>0?p.totalCostGBP/p.totalQty:0;
+        p.totalQty=+(p.totalQty-t.qty).toFixed(8);
+        p.totalCostGBP=Math.max(0,p.totalCostGBP-cpu*t.qty);
+      }
+    }
+    if(t.sl)p.sl=t.sl; if(t.tp)p.tp=t.tp;
+  });
+
+  return Object.values(pos)
+    .filter(p=>Math.abs(p.totalQty)>0.000001)
+    .map(p=>({
+      ...p,
+      side:p.totalQty<0?'Short':'Long',
+      totalQty:Math.abs(p.totalQty),
+      avgCostGBP:Math.abs(p.totalQty)>0?p.totalCostGBP/Math.abs(p.totalQty):0
+    }));
+}
+
+function realisedFY() {
+  const s=new Date('2025-04-01'),e=new Date('2026-03-31T23:59:59');
+  return data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null).filter(t=>{const d=new Date(t.date);return d>=s&&d<=e;}).reduce((s,t)=>s+(t.pnlGBP||0),0);
+}
+
+function totalFeesFY() {
+  const s=new Date('2025-04-01'),e=new Date('2026-03-31T23:59:59');
+  return data.trades.filter(t=>{const d=new Date(t.date);return d>=s&&d<=e;}).reduce((s,t)=>s+(t.feesGBP||0),0);
+}
+
+function realisedFiltered() {
+  const {from,to}=getFilterDates();
+  return data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null).filter(t=>{
+    const d=new Date(t.date);
+    if(from&&d<from)return false;
+    if(to&&d>to)return false;
+    return true;
+  }).reduce((s,t)=>s+(t.pnlGBP||0),0);
+}
+
+function totalFeesFiltered() {
+  return data.trades.filter(t=>inFilterRange(t.date)).reduce((s,t)=>s+(t.feesGBP||0),0);
+}
+
+function monthlyFees() {
+  const m={};
+  data.trades.filter(t=>inFilterRange(t.date)).forEach(t=>{if(t.feesGBP){const k=t.date.substring(0,7);m[k]=(m[k]||0)+(t.feesGBP||0);}});
+  return m;
+}
+
+function monthlyPnL() {
+  const m={};
+  data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null&&inFilterRange(t.date)).forEach(t=>{
+    const k=t.date.substring(0,7);
+    m[k]=(m[k]||0)+(t.pnlGBP||0);
+  });
+  return m;
+}
+
+function brokerTotals() {
+  const t={};getPositions().forEach(p=>{t[p.broker]=(t[p.broker]||0)+p.totalCostGBP;});return t;
+}
+
+function subclassTotals() {
+  const pos=getPositions();
+  // Stocks = class is Stock/ETF
+  const stocks=pos.filter(p=>p.class==='Stock/ETF').reduce((s,p)=>s+p.totalCostGBP,0);
+  // Futures = has futures tag or subclass
+  const futures=pos.filter(p=>p.subclass==='Futures'||(p.tags||[]).includes('futures')).reduce((s,p)=>s+p.totalCostGBP,0);
+  // Crypto Spot = crypto but not futures
+  const spot=pos.filter(p=>p.class==='Crypto'&&p.subclass!=='Futures'&&!(p.tags||[]).includes('futures')).reduce((s,p)=>s+p.totalCostGBP,0);
+  return {spot,futures,stocks};
+}
+
+function pnlByTag() {
+  const t={};
+  data.trades.filter(x=>x.type==='sell'&&x.pnlGBP!=null&&x.tags?.length&&inFilterRange(x.date)).forEach(x=>{
+    x.tags.forEach(tag=>{t[tag]=t[tag]||{pnl:0,count:0};t[tag].pnl+=x.pnlGBP;t[tag].count++;});
+  });
+  return t;
+}
+
+function checkBnB() {
+  // Bed & Breakfast: sold and repurchased same asset within 30 days
+  const warnings=[];
+  const sells=data.trades.filter(t=>t.type==='sell');
+  sells.forEach(sell=>{
+    const sellDate=new Date(sell.date);
+    const rebuys=data.trades.filter(t=>t.type==='buy'&&t.asset===sell.asset&&new Date(t.date)>sellDate&&(new Date(t.date)-sellDate)/(1000*60*60*24)<=30);
+    if(rebuys.length)warnings.push({sell,rebuys});
+  });
+  return warnings;
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderAll() {
+  renderDashboard();renderPositions();renderTrades();
+  renderDividends();renderPnL();renderPairs();
+  renderFees();renderTax();renderImportHistory();renderSnapshots();renderPendingMatches();
+}
+
+function renderDashboard() {
+  const pos=getPositions();
+  const total=pos.reduce((s,p)=>s+p.totalCostGBP,0);
+  const rFY=realisedFY();
+  const fFY=totalFeesFY();
+  const brokers=new Set(pos.map(p=>p.broker));
+  $('m-total').textContent=gbp(total);
+  $('m-total-sub').textContent=`Open positions cost basis`;
+  $('m-positions').textContent=pos.length;
+  $('m-positions-sub').textContent=`across ${brokers.size} broker${brokers.size!==1?'s':''}`;
+  $('m-realised').textContent=gbp(rFY);
+  $('m-realised-sub').textContent=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null).length+' closed trades · UK FY 25/26';
+  $('m-fees').textContent=gbp(fFY);
+
+  // positions table
+  const dpt=$('dash-pos-table');
+  if(!pos.length){dpt.innerHTML=emptyState('No positions yet','Import a CSV or add a trade to get started.');return;}
+  dpt.innerHTML=`<table><thead><tr><th>Asset</th><th>Broker</th><th>Side</th><th>Qty</th><th>Avg Cost</th><th>Cost Basis (GBP)</th></tr></thead><tbody>${pos.slice(0,6).map(p=>`<tr><td><strong>${p.asset}</strong> ${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td></tr>`).join('')}</tbody></table>`;
+
+  // broker alloc — shows open position cost basis
+  const bt=brokerTotals(), btTotal=Object.values(bt).reduce((s,v)=>s+v,0);
+  const bColors={'Hargreaves Lansdown':'var(--accent)','IBKR':'var(--blue)','Bybit':'var(--amber)','Binance':'var(--red)','Bitget':'var(--purple)','BingX':'var(--red)','Capital.com':'var(--blue)'};
+  const bAllocEl=$('dash-broker-alloc');
+  bAllocEl.innerHTML=!btTotal?'<div style="font-size:12px;color:var(--text3);text-align:center;padding:8px;">No data</div>':Object.entries(bt).sort((a,b)=>b[1]-a[1]).map(([b,v])=>{const p=Math.round(v/btTotal*100),c=bColors[b]||'var(--text2)';return `<div class="alloc-row"><div class="alloc-dot" style="background:${c};"></div><span class="alloc-name">${b}</span><div class="alloc-track"><div class="alloc-fill" style="width:${p}%;background:${c};"></div></div><span class="alloc-pct">${p}%</span><span class="alloc-val">${gbp(v)}</span></div>`;}).join('');
+
+  // class alloc — Stocks vs Crypto Spot vs Crypto Futures
+  const sc=subclassTotals();
+  const classEl=$('dash-class-alloc');
+  if(!total){classEl.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:8px;">No data</div>';}
+  else {
+    const rows=[
+      {label:'Stocks & ETFs',val:sc.stocks,color:'var(--accent)'},
+      {label:'Crypto Spot',val:sc.spot,color:'var(--amber)'},
+      {label:'Crypto Futures',val:sc.futures,color:'var(--purple)'},
+    ].filter(r=>r.val>0);
+    classEl.innerHTML=rows.map(r=>{const p=Math.round(r.val/total*100);return `<div class="alloc-row"><div class="alloc-dot" style="background:${r.color};"></div><span class="alloc-name">${r.label}</span><div class="alloc-track"><div class="alloc-fill" style="width:${p}%;background:${r.color};"></div></div><span class="alloc-pct">${p}%</span><span class="alloc-val">${gbp(r.val)}</span></div>`;}).join('');
+  }
+
+  renderBarChart('dash-pnl-chart', monthlyPnL(), 90);
+}
+
+function renderPositions() {
+  const all=getPositions();
+  let pos=all;
+  const brokerFilter=$('pos-broker-filter')?.value||'';
+  if(posFilterMode==='stocks')pos=all.filter(p=>p.class!=='Crypto');
+  else if(posFilterMode==='crypto')pos=all.filter(p=>p.class==='Crypto');
+  else if(posFilterMode==='long')pos=all.filter(p=>p.side==='Long');
+  else if(posFilterMode==='short')pos=all.filter(p=>p.side==='Short');
+  else pos=all;
+  if(brokerFilter) pos=pos.filter(p=>p.broker===brokerFilter);
+  $('pos-sub').textContent=`${pos.length} positions · ${gbp(pos.reduce((s,p)=>s+p.totalCostGBP,0))} cost basis`;
+  const wrap=$('pos-table-wrap');
+  if(!pos.length){wrap.innerHTML=emptyState('No positions','Import a CSV to populate.');return;}
+  wrap.innerHTML=`<table><thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty Open</th><th>Avg Cost</th><th>Cost Basis</th><th>Method</th><th>SL / TP</th><th>Tags</th><th>Since</th></tr></thead><tbody>${pos.map(p=>{
+    const method=p.class==='Crypto'?'<span class="badge badge-gray tip" data-tip="First In First Out">FIFO</span>':'<span class="badge badge-gray tip" data-tip="HMRC Share Pooling">Pool</span>';
+    const sltp=`<div class="sltp-row">${p.sl?`<div class="sltp-item"><span class="sltp-lbl">SL</span><span class="sltp-val neg">${p.sl}</span></div>`:''}${p.tp?`<div class="sltp-item"><span class="sltp-lbl">TP</span><span class="sltp-val pos">${p.tp}</span></div>`:''}</div>`;
+    const tags=(p.tags||[]).map(t=>`<span class="tag-pill">${t}</span>`).join('');
+    return `<tr><td><strong>${p.asset}</strong></td><td>${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td><td>${method}</td><td>${sltp||'—'}</td><td>${tags||'—'}</td><td style="color:var(--text3);font-size:12px;">${p.openDate}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function renderTrades() {
+  let trades=[...data.trades].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(tradeFilterMode==='buy')trades=trades.filter(t=>t.type==='buy');
+  else if(tradeFilterMode==='sell')trades=trades.filter(t=>t.type==='sell');
+  // Broker filter
+  const brokerFilter=$('trades-broker-filter')?.value||'';
+  if(brokerFilter) trades=trades.filter(t=>t.broker===brokerFilter);
+  // Date filter
+  trades=trades.filter(t=>inFilterRange(t.date));
+  // Search filter
+  const searchEl=$('trades-search');
+  const q=(searchEl?searchEl.value:'').toLowerCase().trim();
+  if(q){
+    trades=trades.filter(t=>
+      (t.asset||'').toLowerCase().includes(q)||
+      (t.broker||'').toLowerCase().includes(q)||
+      (t.description||'').toLowerCase().includes(q)||
+      (t.date||'').includes(q)||
+      (t.tags||[]).some(tag=>tag.toLowerCase().includes(q))||
+      (t.notes||'').toLowerCase().includes(q)
+    );
+  }
+  $('trades-sub').textContent=`${trades.length} trades · click rows to select for pairs`;
+  const wrap=$('trades-table-wrap');
+  if(!trades.length){wrap.innerHTML=emptyState('No trades yet','Import a CSV or add a trade.');return;}
+  wrap.innerHTML=`<table><thead><tr><th></th><th>Date</th><th>Type</th><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty</th><th>Price (orig)</th><th>FX</th><th>Value (GBP)</th><th>Fees (GBP)</th><th>P&L</th><th>Tags</th><th>SL/TP</th><th></th></tr></thead><tbody>${trades.map(t=>{
+    const isBuy=t.type==='buy';
+    const pnlCell=t.pnlGBP!=null?`<span class="${t.pnlGBP>=0?'pos':'neg'}">${gbp(t.pnlGBP)}</span>`:'<span style="color:var(--text3);">—</span>';
+    const origPrice=t.price?`${t.currency==='GBP'?'£':t.currency==='USDT'||t.currency==='USD'?'$':'€'}${t.price.toFixed(4)}`:'—';
+    const tags=(t.tags||[]).map(tg=>`<span class="tag-pill">${tg}</span>`).join('');
+    const sltp=(t.sl||t.tp)?`<span style="font-size:11px;color:var(--text3);">${t.sl?'SL:'+t.sl:''}${t.sl&&t.tp?' ':''}${t.tp?'TP:'+t.tp:''}</span>`:'—';
+    const sel=selectedTradeIds.has(t.id)?'selected':'';
+    const pairBadge=t.pairId?`<span class="badge badge-purple" style="font-size:10px;" title="${getPairName(t.pairId)}">pair</span>`:'';
+    return `<tr class="selectable ${sel}" onclick="toggleTradeSelect('${t.id}',event)"><td>${pairBadge}</td><td style="color:var(--text3);font-size:12px;">${t.date}</td><td><span class="badge ${isBuy?'badge-green':'badge-red'}">${isBuy?'Buy':'Sell'}</span></td><td><strong>${t.asset}</strong></td><td>${classBadge(t.class)}</td><td>${brokerTag(t.broker)}</td><td><span class="badge ${t.side==='Short'?'badge-red':'badge-green'}" style="font-size:10px;">${t.side}</span></td><td class="mono">${qty(t.qty)}</td><td class="mono">${origPrice}</td><td class="mono" style="color:var(--text3);font-size:11px;">${t.fxRate&&t.fxRate!==1?t.fxRate.toFixed(4):'—'}</td><td class="mono">${t.valueGBP?gbp(t.valueGBP):'—'}</td><td class="mono" style="color:var(--amber);">${t.feesGBP?gbp(t.feesGBP):'—'}</td><td class="mono">${pnlCell}</td><td>${tags||'—'}</td><td>${sltp}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();delTrade('${t.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function renderDividends() {
+  const fyStart=new Date('2025-04-06'),fyEnd=new Date('2026-04-05');
+  const fyDivs=data.dividends.filter(d=>{const dt=new Date(d.date);return dt>=fyStart&&dt<=fyEnd;});
+  const totalFY=fyDivs.reduce((s,d)=>s+(d.valueGBP||d.gross||0),0);
+  const whtTotal=data.dividends.reduce((s,d)=>s+(d.wht||0),0);
+  const netTotal=data.dividends.reduce((s,d)=>s+(d.valueGBP||d.gross||0),0)-whtTotal;
+  $('div-total-fy').textContent=gbp(totalFY);
+  $('div-wht').textContent=gbp(whtTotal);
+  $('div-net').textContent=gbp(netTotal);
+  const wrap=$('div-table-wrap');
+  if(!data.dividends.length){wrap.innerHTML=emptyState('No dividends yet','Dividends from IBKR and HL CSVs are detected automatically on import.');return;}
+  const rows=[...data.dividends].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(d=>`<tr><td style="font-size:12px;color:var(--text3);">${d.date}</td><td><strong>${d.asset}</strong></td><td>${brokerTag(d.broker)}</td><td class="mono">${d.currency} ${(d.gross||0).toFixed(2)}</td><td class="mono" style="color:var(--red);">-${(d.wht||0).toFixed(2)}</td><td class="mono pos">${gbp(d.valueGBP||d.gross||0)}</td><td><button class="btn btn-danger btn-sm" onclick="delDividend('${d.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`).join('');
+  wrap.innerHTML=`<table><thead><tr><th>Date</th><th>Asset</th><th>Broker</th><th>Gross (orig)</th><th>WHT</th><th>Net (GBP)</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderPnL() {
+  const rFY=realisedFY();
+  const rFiltered=realisedFiltered();
+  const cgtUsed=Math.max(0,rFY);
+  const cgtPct=Math.min(100,Math.round(cgtUsed/3000*100));
+  $('pnl-realised').textContent=gbp(rFiltered);
+  $('cgt-fill').style.width=cgtPct+'%';
+  $('pnl-cgt').textContent=`${gbp(cgtUsed)} / £3,000`;
+  $('pnl-cgt-sub').textContent=`£${Math.max(0,3000-cgtUsed).toLocaleString()} remaining`;
+
+  const tags=pnlByTag();
+  $('pnl-by-tag-count').textContent=Object.keys(tags).length+' tags';
+  renderBarChart('pnl-chart',monthlyPnL(),120);
+
+  // by asset — filtered
+  const byAsset={};
+  data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null&&inFilterRange(t.date)).forEach(t=>{
+    byAsset[t.asset]=byAsset[t.asset]||{pnl:0,count:0,class:t.class};
+    byAsset[t.asset].pnl+=t.pnlGBP;byAsset[t.asset].count++;
+  });
+  const ae=$('pnl-by-asset');
+  if(!Object.keys(byAsset).length){ae.innerHTML='<div style="padding:16px;text-align:center;font-size:12px;color:var(--text3);">No closed trades in this period</div>';}
+  else ae.innerHTML=`<div style="display:flex;justify-content:flex-end;padding:8px 14px 0;"><button class="btn btn-secondary btn-sm" onclick="exportPnLCSV()">Export CSV</button></div><table><thead><tr><th>Asset</th><th>Class</th><th>Trades</th><th>P&L</th></tr></thead><tbody>${Object.entries(byAsset).sort((a,b)=>b[1].pnl-a[1].pnl).map(([a,d])=>`<tr><td><strong>${a}</strong></td><td>${classBadge(d.class)}</td><td class="mono">${d.count}</td><td class="mono ${d.pnl>=0?'pos':'neg'}">${gbp(d.pnl)}</td></tr>`).join('')}</tbody></table>`;
+
+  // by tag
+  const te=$('pnl-by-tag');
+  if(!Object.keys(tags).length){te.innerHTML='<div style="font-size:12px;color:var(--text3);">No tags assigned yet.</div>';}
+  else te.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:10px;">${Object.entries(tags).map(([tag,d])=>`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;min-width:150px;"><div style="font-size:12px;font-weight:500;margin-bottom:6px;">${tag}</div><div style="font-size:18px;font-weight:600;font-family:var(--mono);" class="${d.pnl>=0?'pos':'neg'}">${gbp(d.pnl)}</div><div style="font-size:11px;color:var(--text3);margin-top:3px;">${d.count} trade${d.count!==1?'s':''}</div></div>`).join('')}</div>`;
+}
+
+function exportPnLCSV() {
+  const {from,to}=getFilterDates();
+  const trades=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null&&inFilterRange(t.date));
+  const fromStr=from?from.toISOString().split('T')[0]:'all';
+  const toStr=to?to.toISOString().split('T')[0]:'now';
+  const csv='Date,Asset,Class,Broker,Qty,Price (orig),Currency,FX Rate,Value (GBP),Cost Basis (GBP),P&L (GBP),Tags\n'+
+    trades.map(t=>`${t.date},${t.asset},${t.class},${t.broker},${t.qty},${t.price||0},${t.currency},${t.fxRate||1},${(t.valueGBP||0).toFixed(2)},${(t.costBasisGBP||0).toFixed(2)},${(t.pnlGBP||0).toFixed(2)},"${(t.tags||[]).join(',')}"`).join('\n');
+  dlBlob(csv,'text/csv',`foliotrack-pnl-${fromStr}-${toStr}.csv`);
+  toast('P&L exported ✓','success');
+}
+
+function exportTradesCSV() {
+  const trades=[...data.trades].filter(t=>inFilterRange(t.date)).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const csv='Date,Type,Asset,Class,Broker,Side,Qty,Price (orig),Currency,FX Rate,Value (GBP),Fees (GBP),P&L (GBP),Tags,Notes\n'+
+    trades.map(t=>`${t.date},${t.type},${t.asset},${t.class},${t.broker},${t.side},${t.qty},${t.price||0},${t.currency},${t.fxRate||1},${(t.valueGBP||0).toFixed(2)},${(t.feesGBP||0).toFixed(2)},${t.pnlGBP!=null?(t.pnlGBP||0).toFixed(2):''},"${(t.tags||[]).join(',')}","${t.notes||''}"`).join('\n');
+  dlBlob(csv,'text/csv',`foliotrack-trades-${today()}.csv`);
+  toast('Trades exported ✓','success');
+}
+
+function dlBlob(content, type, filename) {
+  const blob=new Blob([content],{type});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  a.click();
+}
+
+function renderPairs() {
+  const el=$('pairs-list');
+  if(!data.pairs.length){el.innerHTML=emptyState('No pairs yet','Go to Trades, select 2+ trades, and click "Create Pair".');return;}
+  el.innerHTML=data.pairs.map(pair=>{
+    const legs=data.trades.filter(t=>t.pairId===pair.id);
+    const netPnL=legs.reduce((s,t)=>{
+      if(t.type==='sell'&&t.pnlGBP!=null)return s+t.pnlGBP;
+      return s;
+    },0);
+    const totalCost=legs.filter(t=>t.type==='buy').reduce((s,t)=>s+(t.valueGBP||0),0);
+    return `<div class="pair-card">
+      <div class="pair-header">
+        <div><div class="pair-name">${pair.name}</div><div style="font-size:12px;color:var(--text3);margin-top:2px;">${legs.length} trade${legs.length!==1?'s':''} · created ${pair.date}</div></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="text-align:right;"><div style="font-size:11px;color:var(--text3);">Net P&L</div><div style="font-size:18px;font-weight:600;font-family:var(--mono);" class="${netPnL>=0?'pos':'neg'}">${gbp(netPnL)}</div></div>
+          <button class="btn btn-danger btn-sm" onclick="deletePair('${pair.id}')">✕</button>
+        </div>
+      </div>
+      <div class="pair-legs">${legs.map(t=>`<div class="pair-leg"><div><span class="badge ${t.type==='buy'?'badge-green':'badge-red'}" style="margin-right:6px;">${t.type==='buy'?'Long':'Short'}</span><strong>${t.asset}</strong> · ${qty(t.qty)} units · ${t.date}</div><div style="display:flex;align-items:center;gap:10px;"><span class="mono">${gbp(t.valueGBP||0)}</span>${t.pnlGBP!=null?`<span class="mono ${t.pnlGBP>=0?'pos':'neg'}">${gbp(t.pnlGBP)}</span>`:'<span style="color:var(--text3);font-size:12px;">open</span>'}</div></div>`).join('')}</div>
+      <div class="pair-net"><span>Total cost basis: ${gbp(totalCost)}</span><span class="${netPnL>=0?'pos':'neg'}">Net P&L: ${gbp(netPnL)}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderFees() {
+  // Apply date filter
+  const filteredFees=data.trades.filter(t=>t.feesGBP>0&&inFilterRange(t.date));
+  const allFeesTotal=data.trades.filter(t=>t.feesGBP>0).reduce((s,t)=>s+(t.feesGBP||0),0);
+  const fyFees=totalFeesFY();
+  const filteredTotal=filteredFees.reduce((s,t)=>s+(t.feesGBP||0),0);
+  const avg=filteredFees.length?filteredTotal/filteredFees.length:0;
+  $('fee-total').textContent=gbp(filteredTotal);
+  $('fee-fy').textContent=gbp(fyFees);
+  $('fee-avg').textContent=gbp(avg);
+  $('fee-trades').textContent=filteredFees.length;
+
+  // by broker — filtered
+  const byBroker={};
+  filteredFees.forEach(t=>{byBroker[t.broker]=(byBroker[t.broker]||0)+(t.feesGBP||0);});
+  const fbEl=$('fees-by-broker');
+  const fbTotal=Object.values(byBroker).reduce((s,v)=>s+v,0);
+  fbEl.innerHTML=!fbTotal?'<div style="font-size:12px;color:var(--text3);">No fee data in this period</div>':Object.entries(byBroker).sort((a,b)=>b[1]-a[1]).map(([b,v])=>{const p=Math.round(v/fbTotal*100);return `<div class="alloc-row"><div class="alloc-dot" style="background:var(--amber);"></div><span class="alloc-name">${b}</span><div class="alloc-track"><div class="alloc-fill" style="width:${p}%;background:var(--amber);"></div></div><span class="alloc-pct">${p}%</span><span class="alloc-val">${gbp(v)}</span></div>`;}).join('');
+
+  renderBarChart('fees-chart',monthlyFees(),100,'var(--amber)');
+
+  // fee detail table — filtered
+  const ft=$('fees-table');
+  if(!filteredFees.length){ft.innerHTML='<div style="padding:16px;text-align:center;font-size:12px;color:var(--text3);">No fees in this period</div>';return;}
+  const rows=[...filteredFees].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(t=>`<tr><td style="font-size:12px;color:var(--text3);">${t.date}</td><td><strong>${t.asset}</strong></td><td>${brokerTag(t.broker)}</td><td><span class="badge ${t.type==='buy'?'badge-green':'badge-red'}">${t.type}</span></td><td class="mono" style="color:var(--amber);">${gbp(t.feesGBP)}</td><td class="mono" style="color:var(--text3);">${t.fees?`${t.currency} ${t.fees.toFixed(4)}`:'—'}</td></tr>`).join('');
+  ft.innerHTML=`<div style="display:flex;justify-content:flex-end;padding:8px 14px 0;"><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div><table><thead><tr><th>Date</th><th>Asset</th><th>Broker</th><th>Type</th><th>Fee (GBP)</th><th>Fee (orig)</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderTax() {
+  const fyStart=new Date('2025-04-01'),fyEnd=new Date('2026-03-31T23:59:59');
+  const disposals=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null).filter(t=>{const d=new Date(t.date);return d>=fyStart&&d<=fyEnd;});
+  const gains=disposals.filter(t=>t.pnlGBP>0).reduce((s,t)=>s+t.pnlGBP,0);
+  const losses=disposals.filter(t=>t.pnlGBP<0).reduce((s,t)=>s+t.pnlGBP,0);
+  const divIncome=data.dividends.filter(d=>{const dt=new Date(d.date);return dt>=fyStart&&dt<=fyEnd;}).reduce((s,d)=>s+(d.valueGBP||0),0);
+  $('tax-gains').textContent=gbp(gains);
+  $('tax-losses').textContent=gbp(Math.abs(losses));
+  $('tax-div').textContent=gbp(divIncome);
+
+  const bnb=checkBnB();
+  $('bnb-warnings').innerHTML=bnb.length?bnb.map(w=>`<div class="notice notice-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg><div class="notice-text"><strong>Bed &amp; Breakfast rule:</strong> You sold ${w.sell.asset} on ${w.sell.date} and rebought within 30 days.</div></div>`).join(''):'';
+
+  const tt=$('tax-disposals-table');
+  if(!disposals.length){tt.innerHTML='<div style="padding:16px;text-align:center;font-size:12px;color:var(--text3);">No disposals in this tax year</div>';return;}
+  const rows=disposals.map(t=>`<tr><td style="font-size:12px;color:var(--text3);">${t.date}</td><td><strong>${t.asset}</strong></td><td>${classBadge(t.class)}</td><td class="mono">${qty(t.qty)}</td><td class="mono">${gbp(t.valueGBP||0)}</td><td class="mono">${gbp(t.costBasisGBP||0)}</td><td class="mono ${t.pnlGBP>=0?'pos':'neg'}">${gbp(t.pnlGBP)}</td></tr>`).join('');
+  tt.innerHTML=`<table><thead><tr><th>Date</th><th>Asset</th><th>Class</th><th>Qty</th><th>Proceeds</th><th>Cost Basis</th><th>Gain/Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderPendingMatches() {
+  const c=$('pending-matches-container');if(!c)return;
+  const pending=data.trades.filter(t=>t.type==='sell'&&data.pendingMatches.includes(t.id));
+  if(!pending.length){c.innerHTML='';return;}
+  let html=`<div class="notice notice-warn" style="display:flex;align-items:center;justify-content:space-between;"><div style="display:flex;align-items:flex-start;gap:8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0;margin-top:1px;color:var(--amber);"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg><div class="notice-text"><strong>${pending.length} sell trade${pending.length>1?'s':''}</strong> need to be matched. These are likely sells from before the import period — no matching buy found.</div></div><button class="btn btn-primary btn-sm" onclick="confirmAll()">Confirm All (Share Pool)</button></div>`;
+  pending.forEach(sell=>{
+    const buys=data.trades.filter(t=>t.type==='buy'&&t.asset===sell.asset&&new Date(t.date)<=new Date(sell.date));
+    const isStock=sell.class!=='Crypto';
+    const opts=isStock||!buys.length
+      ?`<option value="pool">Share Pool (HMRC — recommended)</option>`+(buys.map(b=>`<option value="${b.id}">${b.date} · ${qty(b.qty)} @ ${gbp(b.priceGBP||b.price)}</option>`).join(''))
+      :buys.map((b,i)=>`<option value="${b.id}" ${i===0?'selected':''}>${b.date} · ${qty(b.qty)} @ ${gbp(b.priceGBP||b.price)} ${i===0?'(FIFO)':''}</option>`).join('');
+    html+=`<div class="match-item"><div class="match-dot"></div><div class="match-info"><div class="match-title">Sold ${qty(sell.qty)} ${sell.asset} · ${sell.date} · ${sell.broker} · ${gbp(sell.valueGBP||0)}</div><div class="match-sub">Which buy to match?</div></div><select class="match-select" id="ms_${sell.id}">${opts}</select><button class="btn btn-primary btn-sm" onclick="confirmMatch('${sell.id}',document.getElementById('ms_${sell.id}').value)">Confirm</button></div>`;
+  });
+  c.innerHTML=html;
+}
+
+function renderImportHistory() {
+  const el=$('import-history');
+  if(!data.imports.length){el.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">No imports yet</div>';return;}
+  el.innerHTML=[...data.imports].reverse().map(imp=>`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 13px;display:flex;align-items:center;gap:10px;margin:4px 8px;"><div style="flex:1;"><div style="font-size:13px;font-weight:500;">${imp.filename}</div><div style="font-size:11px;color:var(--text3);margin-top:2px;">${imp.date} · ${imp.broker} · ${imp.trades} trades${imp.dividends?' · '+imp.dividends+' divs':''}</div></div><span class="badge badge-green">Done</span><button class="btn btn-danger btn-sm" onclick="deleteImport('${imp.id}')">Delete</button></div>`).join('');
+}
+
+function renderSnapshots() {
+  const el=$('snapshots-list');
+  if(!data.snapshots.length){el.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">No snapshots yet</div>';return;}
+  el.innerHTML=[...data.snapshots].reverse().map(s=>`<div class="backup-item"><div class="backup-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div><div class="backup-info"><div class="backup-title">${s.label}</div><div class="backup-sub">${s.date} · ${s.count} trades</div></div><div style="display:flex;gap:6px;"><button class="btn btn-secondary btn-sm" onclick="restoreSnap('${s.id}')">Restore</button><button class="btn btn-secondary btn-sm" onclick="dlSnap('${s.id}')">↓</button><button class="btn btn-danger btn-sm" onclick="deleteSnap('${s.id}')">✕</button></div></div>`).join('');
+}
+
+function renderBarChart(id, monthly, height, color) {
+  const el=$(id); if(!el)return;
+  const entries=Object.entries(monthly).sort();
+  if(!entries.length){el.innerHTML=`<div style="font-size:12px;color:var(--text3);text-align:center;width:100%;padding:${height/3}px 0;">No data</div>`;return;}
+  const vals=entries.map(([,v])=>v);
+  const maxAbs=Math.max(...vals.map(Math.abs),1);
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  el.innerHTML=entries.map(([m,v])=>{
+    const h=Math.round(Math.abs(v)/maxAbs*(height-20));
+    const c=color||(v>=0?'var(--green)':'var(--red)');
+    // m is "YYYY-MM" — show "Mon YY"
+    const parts=m.split('-');
+    const lbl=parts.length>=2?`${months[parseInt(parts[1])-1]} ${parts[0].substring(2)}`:m;
+    return `<div class="bar-col"><div class="bar-fill" style="height:${h}px;background:${c};opacity:0.85;" title="${m}: ${gbp(v)}"></div><div class="bar-lbl">${lbl}</div></div>`;
+  }).join('');
+}
+
+// ============================================================
+// ACTIONS
+// ============================================================
+async function saveTrade() {
+  const asset=($('t-asset').value||'').trim().toUpperCase();
+  const qty_=parseFloat($('t-qty').value);
+  const price=parseFloat($('t-price').value);
+  const date=$('t-date').value;
+  if(!asset||!qty_||!price||!date){toast('Fill in all required fields','error');return;}
+  const currency=$('t-currency').value;
+  const fxRate=await fx(currency,date);
+  const priceGBP=+(price*fxRate).toFixed(6);
+  const valueGBP=+(qty_*priceGBP).toFixed(2);
+  const fees=parseFloat($('t-fees').value)||0;
+  const tagsRaw=$('t-tags').value;
+  const trade={
+    id:genId(),type:$('t-type').value,asset,description:$('t-desc').value||asset,
+    broker:$('t-broker').value,date,qty:qty_,price,currency,priceGBP,valueGBP,fxRate,
+    side:$('t-side').value,leverage:parseInt($('t-leverage').value)||1,
+    fees,feesGBP:+(fees*fxRate).toFixed(2),
+    class:$('t-class').value,
+    sl:parseFloat($('t-sl').value)||null,tp:parseFloat($('t-tp').value)||null,
+    tags:tagsRaw?tagsRaw.split(',').map(t=>t.trim()).filter(Boolean):[],
+    notes:$('t-notes').value,matchedTo:null,pnlGBP:null,pairId:null
+  };
+  data.trades.push(trade);
+  data.trades.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(trade.type==='sell'){data.pendingMatches.push(trade.id);}
+  await save();renderAll();closeModal('modal-trade');
+  toast(`Added: ${trade.type.toUpperCase()} ${qty(qty_)} ${asset}`,'success');
+}
+
+async function saveDividend() {
+  const asset=($('d-asset').value||'').trim().toUpperCase();
+  const gross=parseFloat($('d-gross').value)||0;
+  const wht=parseFloat($('d-wht').value)||0;
+  const date=$('d-date').value;
+  if(!asset||!gross||!date){toast('Fill in required fields','error');return;}
+  const currency=$('d-currency').value;
+  const fxRate=await fx(currency,date);
+  const valueGBP=+((gross-wht)*fxRate).toFixed(2);
+  data.dividends.push({id:genId(),asset,date,gross,wht,currency,broker:$('d-broker').value,valueGBP,fxRate});
+  await save();renderAll();closeModal('modal-dividend');
+  toast('Dividend added ✓','success');
+}
+
+async function deleteSelectedTrades() {
+  const count=selectedTradeIds.size;
+  if(!count)return;
+  if(!confirm(`Delete ${count} selected trade${count>1?'s':''}? This cannot be undone.`))return;
+  // Get affected assets and clear their matches for clean recalculation
+  const affectedAssets=new Set(
+    data.trades.filter(t=>selectedTradeIds.has(t.id)).map(t=>(t.asset||'').trim())
+  );
+  data.trades.forEach(t=>{
+    if(affectedAssets.has((t.asset||'').trim()) && t.matchedTo && t.matchedTo!=='futures') {
+      t.matchedTo=null; t.pnlGBP=null; t.costBasisGBP=null;
+    }
+  });
+  data.trades=data.trades.filter(t=>!selectedTradeIds.has(t.id));
+  data.pendingMatches=data.pendingMatches.filter(id=>!selectedTradeIds.has(id));
+  selectedTradeIds.clear();
+  lastSelectedTradeIdx=-1;
+  autoMatchAll();
+  await save();
+  renderAll();
+  toast(`${count} trade${count>1?'s':''} deleted`,'info');
+}
+
+async function delTrade(id) {
+  if(!confirm('Delete this trade?'))return;
+  const trade = data.trades.find(t=>t.id===id);
+  if(!trade) return;
+  // Clear all matches for same asset so they get recalculated cleanly
+  const asset = (trade.asset||'').trim();
+  data.trades.forEach(t=>{
+    if((t.asset||'').trim()===asset && t.matchedTo && t.matchedTo!=='futures') {
+      t.matchedTo=null; t.pnlGBP=null; t.costBasisGBP=null;
+    }
+  });
+  data.trades = data.trades.filter(t=>t.id!==id);
+  data.pendingMatches = data.pendingMatches.filter(m=>m!==id);
+  autoMatchAll();
+  await save(); renderAll(); toast('Trade deleted','info');
+}
+
+async function delDividend(id) {
+  if(!confirm('Delete this dividend?'))return;
+  data.dividends=data.dividends.filter(d=>d.id!==id);
+  await save();renderAll();toast('Dividend deleted','info');
+}
+
+async function deleteImport(id) {
+  const imp=data.imports.find(i=>i.id===id);
+  if(!imp||!confirm(`Delete import "${imp.filename}"?`))return;
+  await snapshot(`Before deleting: ${imp.filename}`);
+  data.imports=data.imports.filter(i=>i.id!==id);
+  await save();renderAll();toast('Import deleted. Restore via Backups if needed.','info');
+}
+
+// PAIRS
+let lastSelectedTradeIdx = -1;
+
+function toggleTradeSelect(id, e) {
+  if(e.target.tagName==='BUTTON'||e.target.tagName==='SELECT') return;
+  
+  // Shift-click: select range
+  if(e.shiftKey && lastSelectedTradeIdx >= 0) {
+    const allTrades = [...document.querySelectorAll('.selectable')];
+    const clickedIdx = allTrades.findIndex(row => row.onclick?.toString().includes(`'${id}'`));
+    const from = Math.min(lastSelectedTradeIdx, clickedIdx);
+    const to = Math.max(lastSelectedTradeIdx, clickedIdx);
+    allTrades.slice(from, to+1).forEach(row => {
+      const m = (row.getAttribute('onclick')||'').match(/'([^']+)'/);
+      if(m) selectedTradeIds.add(m[1]);
+    });
+  } else {
+    if(selectedTradeIds.has(id)) selectedTradeIds.delete(id);
+    else selectedTradeIds.add(id);
+    const allTrades = [...document.querySelectorAll('.selectable')];
+    lastSelectedTradeIdx = allTrades.findIndex(row => (row.getAttribute('onclick')||'').includes(`'${id}'`));
+  }
+  updatePairBtn();
+  renderTrades();
+}
+
+function updatePairBtn() {
+  const count=selectedTradeIds.size;
+  const btn=$('btn-create-pair'), cnt=$('selected-trades-count');
+  const delBtn=$('btn-delete-selected');
+  if(count>=1){
+    if(delBtn)delBtn.style.display='';
+    cnt.style.display='';cnt.textContent=`${count} selected`;
+  } else {
+    if(delBtn)delBtn.style.display='none';
+    cnt.style.display='none';
+  }
+  if(count>=2){btn.style.display='';}else{btn.style.display='none';}
+}
+
+function openCreatePair() {
+  const trades=data.trades.filter(t=>selectedTradeIds.has(t.id));
+  $('pair-modal-sub').textContent=`${trades.length} trades selected`;
+  $('pair-selected-trades').innerHTML=trades.map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--bg3);border-radius:7px;margin-bottom:5px;font-size:12px;"><div><span class="badge ${t.type==='buy'?'badge-green':'badge-red'}" style="margin-right:7px;">${t.type}</span><strong>${t.asset}</strong></div><span class="mono">${gbp(t.valueGBP||0)}</span></div>`).join('');
+  openModal('modal-pair');
+}
+
+async function savePair() {
+  const name=$('pair-name').value.trim();
+  if(!name){toast('Enter a pair name','error');return;}
+  const pairId=genId();
+  data.pairs.push({id:pairId,name,date:today(),tradeIds:[...selectedTradeIds]});
+  selectedTradeIds.forEach(id=>{const t=data.trades.find(x=>x.id===id);if(t)t.pairId=pairId;});
+  selectedTradeIds.clear();
+  updatePairBtn();
+  await save();renderAll();closeModal('modal-pair');
+  toast(`Pair "${name}" created ✓`,'success');
+}
+
+async function deletePair(id) {
+  if(!confirm('Delete this pair? Trades will remain but pair link is removed.'))return;
+  data.trades.forEach(t=>{if(t.pairId===id)t.pairId=null;});
+  data.pairs=data.pairs.filter(p=>p.id!==id);
+  await save();renderAll();toast('Pair deleted','info');
+}
+
+function getPairName(pairId) {
+  return data.pairs.find(p=>p.id===pairId)?.name||'';
+}
+
+// BACKUPS
+async function snapshot(label) {
+  data.snapshots.push({id:genId(),date:today(),label,count:data.trades.length,data:JSON.stringify({trades:data.trades,dividends:data.dividends,imports:data.imports})});
+  if(data.snapshots.length>20)data.snapshots=data.snapshots.slice(-20);
+}
+
+async function restoreSnap(id) {
+  const s=data.snapshots.find(x=>x.id===id);
+  if(!s||!confirm(`Restore to "${s.label}"?`))return;
+  const parsed=JSON.parse(s.data);
+  data.trades=parsed.trades||[];data.dividends=parsed.dividends||[];data.imports=parsed.imports||[];
+  data.pendingMatches=[];checkMatches();
+  await save();renderAll();toast('Snapshot restored ✓','success');
+}
+
+function dlSnap(id) {
+  const s=data.snapshots.find(x=>x.id===id);
+  if(s)dlJSON(JSON.parse(s.data),`foliotrack-snapshot-${s.date}.json`);
+}
+
+async function deleteSnap(id) {
+  if(!confirm('Delete this snapshot? This cannot be undone.')) return;
+  data.snapshots=data.snapshots.filter(s=>s.id!==id);
+  await save();
+  renderSnapshots();
+  toast('Snapshot deleted','info');
+}
+
+function exportJSON() {
+  dlJSON({exportDate:new Date().toISOString(),trades:data.trades,dividends:data.dividends,imports:data.imports,snapshots:data.snapshots,pairs:data.pairs},`foliotrack-backup-${today()}.json`);
+  toast('Backup exported ✓','success');
+}
+
+async function importJSON(e) {
+  const file=e.target.files[0];if(!file)return;
+  try{
+    const d=JSON.parse(await file.text());
+    if(!d.trades){toast('Invalid backup','error');return;}
+    await snapshot('Before JSON restore');
+    data.trades=d.trades||[];data.dividends=d.dividends||[];data.imports=d.imports||[];
+    data.snapshots=d.snapshots||data.snapshots;data.pairs=d.pairs||[];
+    data.pendingMatches=[];checkMatches();
+    await save();renderAll();toast(`Restored: ${d.trades.length} trades ✓`,'success');
+  }catch(e){toast('Could not parse backup','error');}
+  e.target.value='';
+}
+
+function exportTaxReport() {
+  const fyStart=new Date('2025-04-06'),fyEnd=new Date('2026-04-05');
+  const disposals=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null).filter(t=>{const d=new Date(t.date);return d>=fyStart&&d<=fyEnd;});
+  const csv='Date,Asset,Class,Qty,Proceeds (GBP),Cost Basis (GBP),Gain/Loss (GBP)\n'+disposals.map(t=>`${t.date},${t.asset},${t.class},${t.qty},${(t.valueGBP||0).toFixed(2)},${(t.costBasisGBP||0).toFixed(2)},${(t.pnlGBP||0).toFixed(2)}`).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`foliotrack-tax-2025-26.csv`;a.click();
+  toast('Tax report exported ✓','success');
+}
+
+function dlJSON(d,name) {
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download=name;a.click();
+}
+
+// ============================================================
+// UI HELPERS
+// ============================================================
+const VIEWS={dashboard:'Dashboard',positions:'Open Positions',trades:'Trade History',dividends:'Dividends',pnl:'P&L Analysis',pairs:'Pairs Trading',fees:'Fees',tax:'Tax Report',import:'Import CSV',backups:'Backups'};
+
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  $('view-'+name).classList.add('active');
+  $('page-title').textContent=VIEWS[name]||name;
+  // Match nav item by its onclick attribute exactly
+  document.querySelectorAll('.nav-item').forEach(item=>{
+    const onclick=item.getAttribute('onclick')||'';
+    if(onclick===`showView('${name}')`) item.classList.add('active');
+  });
+  $('portfolio-dropdown').classList.remove('open');
+}
+
+function setFilter(el,period) {
+  document.querySelectorAll('.date-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const now=new Date(),fmt=d=>d.toISOString().split('T')[0];
+  let from=new Date(),to=new Date();
+  if(period==='1m')from.setMonth(from.getMonth()-1);
+  else if(period==='3m')from.setMonth(from.getMonth()-3);
+  else if(period==='ytd')from=new Date(now.getFullYear(),0,1);
+  else if(period==='fy'){
+    // UK FY: 1 April to 31 March
+    const y=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;
+    from=new Date(y,3,1); // 1 April
+    to=new Date(y+1,2,31); // 31 March
+  }
+  else if(period==='1y')from.setFullYear(from.getFullYear()-1);
+  else if(period==='all'){from=new Date(2018,0,1);to=new Date(2099,0,1);}
+  $('date-from').value=fmt(from);$('date-to').value=fmt(to);
+  // Apply filter to all views
+  renderAll();
+}
+
+function filterPos(f,el){posFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPositions();}
+function filterTrades(f,el){tradeFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTrades();}
+function openModal(id){$(id).classList.add('open');}
+function closeModal(id){$(id).classList.remove('open');}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+
+function $(id){return document.getElementById(id);}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
+function today(){return new Date().toISOString().split('T')[0];}
+function gbp(n){return'£'+(Math.abs(n||0)).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function qty(n){return n>=1?n.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:4}):(n||0).toFixed(6);}
+function emptyState(title,sub=''){return`<div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-title">${title}</div>${sub?`<div class="empty-sub">${sub}</div>`:''}</div>`;}
+function classBadge(c){return`<span class="badge ${c==='Crypto'?'badge-amber':'badge-blue'}" style="font-size:10px;padding:1px 5px;">${c==='Crypto'?'Crypto':'ETF'}</span>`;}
+function brokerTag(b){const k=(b||'').toLowerCase().replace(/\s/g,'').replace(/\./g,'');return`<span class="broker-tag bt-${k}">${b}</span>`;}
+
+function toast(msg,type='info'){
+  const c=$('toasts'),t=document.createElement('div');
+  t.className=`toast toast-${type}`;
+  t.innerHTML=`<span style="color:${type==='success'?'var(--green)':type==='error'?'var(--red)':'var(--blue)'};font-weight:600;">${type==='success'?'✓':type==='error'?'✕':'ℹ'}</span> ${msg}`;
+  c.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity 0.3s';setTimeout(()=>t.remove(),300);},3500);
+}
+
+// Drag & drop
+['main-drop-zone'].forEach(id=>{
+  const el=$(id);if(!el)return;
+  el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('drag');});
+  el.addEventListener('dragleave',()=>el.classList.remove('drag'));
+  el.addEventListener('drop',e=>{e.preventDefault();el.classList.remove('drag');const f=e.dataTransfer.files[0];if(f)processFile(f,null);});
+});
+
+// Date input
+$('t-date').value=today();
+$('d-date').value=today();
+// Custom date range triggers full re-render
+$('date-from').addEventListener('change',()=>renderAll());
+$('date-to').addEventListener('change',()=>renderAll());
+
+// Init — default to All to show full history
+const allChip=document.querySelector('.date-chip[onclick*="all"]');
+if(allChip){allChip.classList.add('active');document.querySelector('.date-chip[onclick*="1m"]').classList.remove('active');}
+setFilter(allChip||document.querySelector('.date-chip.active'),'all');
+loadLiveFX();
+setInterval(loadLiveFX,60000);
+load();
+</script>
+</body>
+</html>
