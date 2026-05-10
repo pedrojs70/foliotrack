@@ -2970,22 +2970,27 @@ async function refreshLivePrices() {
   });
   const uniqueTickers = [...new Set(Object.keys(stockTickerMap))].filter(Boolean);
   if(uniqueTickers.length) {
-    const symbol = uniqueTickers.join(',');
-    try {
-      const res = await fetch(`https://api.twelvedata.com/price?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`);
-      if(res.ok) {
-        const d = await res.json();
-        uniqueTickers.forEach(ticker => {
-          const info = stockTickerMap[ticker];
-          if(!info) return;
-          const priceData = uniqueTickers.length === 1 ? d : d[ticker];
-          if(priceData?.price && !priceData.code) {
-            livePrices[info.asset] = {price: parseFloat(priceData.price), source:'twelvedata', currency: info.currency};
+    // Fetch each ticker individually — more reliable than batch for mixed exchanges
+    for(const ticker of uniqueTickers) {
+      const info = stockTickerMap[ticker];
+      if(!info) continue;
+      try {
+        // For LSE tickers (.L suffix), specify exchange
+        const isLSE = ticker.endsWith('.L');
+        const cleanTicker = isLSE ? ticker.replace('.L','') : ticker;
+        const exchange = isLSE ? '&exchange=LSE' : '';
+        const url = `https://api.twelvedata.com/price?symbol=${cleanTicker}${exchange}&apikey=${TWELVE_DATA_KEY}`;
+        const res = await fetch(url);
+        if(res.ok) {
+          const d = await res.json();
+          if(d?.price && !d.code) {
+            livePrices[info.asset] = {price: parseFloat(d.price), source:'twelvedata', currency: info.currency};
             fetched++;
           }
-        });
-      }
-    } catch(e) {}
+        }
+      } catch(e) {}
+      await new Promise(r=>setTimeout(r,250)); // Rate limit: max 8/sec on free plan
+    }
   } // end if(uniqueTickers.length)
   } // end if(stockPositions.length)
 
