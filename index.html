@@ -955,7 +955,7 @@ function sync(state, text) {
   const dot = $('sync-dot'), txt = $('sync-text');
   if(!dot) return;
   dot.className = 'sync-dot' + (state==='syncing'?' syncing':state==='error'?' error':'');
-  txt.textContent = text;
+  if(txt) txt.textContent = text;
 }
 
 // ============================================================
