@@ -397,19 +397,17 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
       <div class="fx-pair"><span>USD/GBP</span><span class="fx-val" id="fx-usd">—</span></div>
       <div class="fx-pair"><span>EUR/GBP</span><span class="fx-val" id="fx-eur">—</span></div>
       <div class="fx-pair"><span>USDT/GBP</span><span class="fx-val" id="fx-usdt">—</span></div>
-      <div class="fy-badge">UK FY: 1 Apr 2025 – 31 Mar 2026</div>
+      <div class="fy-badge" id="fy-badge-top" style="display:none;"></div>
     </div>
 
     <div class="topbar">
       <div class="topbar-title" id="page-title">Dashboard</div>
       <div class="topbar-right">
         <div class="date-filter">
-          <div class="date-chip active" onclick="setFilter(this,'1m')">1M</div>
-          <div class="date-chip" onclick="setFilter(this,'3m')">3M</div>
+          <div class="date-chip" onclick="setFilter(this,'fy')">UK FY 25/26</div>
+          <div class="date-chip" onclick="setFilter(this,'fy2425')">UK FY 24/25</div>
+          <div class="date-chip" onclick="setFilter(this,'fy2324')">UK FY 23/24</div>
           <div class="date-chip" onclick="setFilter(this,'ytd')">YTD</div>
-          <div class="date-chip" onclick="setFilter(this,'fy')">UK FY</div>
-          <div class="date-chip" onclick="setFilter(this,'fy2425')">FY 24/25</div>
-          <div class="date-chip" onclick="setFilter(this,'fy2324')">FY 23/24</div>
           <div class="date-chip" onclick="setFilter(this,'1y')">1Y</div>
           <div class="date-chip" onclick="setFilter(this,'all')">All</div>
           <span class="date-sep">|</span>
@@ -527,21 +525,50 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
     <!-- P&L -->
     <div id="view-pnl" class="view">
       <div class="content">
-        <div class="metrics metrics-3">
+        <div class="metrics metrics-2">
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--green),transparent);"></div><div class="metric-label">Realised P&amp;L</div><div class="metric-value" id="pnl-realised">£0</div><div class="metric-sub neu" id="pnl-period-label">selected period</div></div>
-          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--blue),transparent);"></div><div class="metric-label">By Tag</div><div class="metric-value" id="pnl-by-tag-count">0 tags</div><div class="metric-sub neu">see breakdown below</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--purple),transparent);"></div>
             <div class="metric-label">CGT Allowance 25/26</div>
             <div class="metric-value" id="pnl-cgt">£0 / £3,000</div>
             <div class="cgt-bar-bg"><div class="cgt-bar-fill" id="cgt-fill" style="width:0%"></div></div>
-            <div class="metric-sub neu" id="pnl-cgt-sub">£3,000 remaining</div>
+            <div class="metric-sub neu" id="pnl-cgt-sub">£3,000 remaining · UK FY 25/26</div>
           </div>
         </div>
         <div class="grid2">
-          <div class="card"><div class="card-head"><div class="card-title">Monthly P&amp;L</div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span id="pnl-period-badge" style="display:inline-flex;align-items:center;gap:4px;background:var(--purple-dim);border:1px solid rgba(167,139,250,0.15);color:var(--purple);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;">All</span><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div></div><div class="card-body"><div class="bar-chart" style="height:120px;" id="pnl-chart"><div style="font-size:12px;color:var(--text3);text-align:center;width:100%;padding:35px 0;">No data</div></div></div></div>
-          <div class="card"><div class="card-head"><div class="card-title">P&amp;L by Asset</div><div style="display:flex;gap:6px;align-items:center;"><select id="pnl-class-filter" onchange="renderPnL()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:5px 9px;color:var(--text);font-family:var(--font);font-size:12px;outline:none;"><option value="">All Classes</option><option value="Stock/ETF">Stocks &amp; ETFs</option><option value="Crypto Spot">Crypto Spot</option><option value="Crypto Futures">Crypto Futures</option></select><select id="pnl-broker-filter" onchange="renderPnL()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:5px 9px;color:var(--text);font-family:var(--font);font-size:12px;outline:none;"><option value="">All Brokers</option><option value="IBKR">IBKR</option><option value="Hargreaves Lansdown">Hargreaves Lansdown</option><option value="Bitget">Bitget</option><option value="BingX">BingX</option><option value="Binance">Binance</option></select></div></div><div class="table-wrap" id="pnl-by-asset"><div style="padding:18px;text-align:center;font-size:12px;color:var(--text3);">No closed trades</div></div></div>
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">Monthly P&amp;L</div>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <span id="pnl-period-badge" style="display:inline-flex;align-items:center;background:var(--purple-dim);border:1px solid rgba(167,139,250,0.15);color:var(--purple);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;">UK FY 25/26</span>
+                <button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
+              </div>
+            </div>
+            <div class="table-wrap" id="pnl-monthly-table"><div style="padding:18px;text-align:center;font-size:12px;color:var(--text3);">No data</div></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">P&amp;L by Asset</div>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <select id="pnl-class-filter" onchange="renderPnL()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:5px 9px;color:var(--text);font-family:var(--font);font-size:12px;outline:none;">
+                  <option value="">All Classes</option>
+                  <option value="Stock/ETF">Stocks &amp; ETFs</option>
+                  <option value="Crypto Spot">Crypto Spot</option>
+                  <option value="Crypto Futures">Crypto Futures</option>
+                </select>
+                <select id="pnl-broker-filter" onchange="renderPnL()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:5px 9px;color:var(--text);font-family:var(--font);font-size:12px;outline:none;">
+                  <option value="">All Brokers</option>
+                  <option value="IBKR">IBKR</option>
+                  <option value="Hargreaves Lansdown">Hargreaves Lansdown</option>
+                  <option value="Bitget">Bitget</option>
+                  <option value="BingX">BingX</option>
+                  <option value="Binance">Binance</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
+              </div>
+            </div>
+            <div class="table-wrap" id="pnl-by-asset"><div style="padding:18px;text-align:center;font-size:12px;color:var(--text3);">No closed trades</div></div>
+          </div>
         </div>
-        <div class="card"><div class="card-head"><div class="card-title">P&amp;L by Tag / Strategy</div></div><div id="pnl-by-tag" style="padding:14px 16px;"><div style="font-size:12px;color:var(--text3);">No tags assigned yet. Add tags to your trades to see strategy breakdown.</div></div></div>
       </div>
     </div>
 
@@ -581,7 +608,6 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--accent),transparent);"></div><div class="metric-label">Net Taxable Gain</div><div class="metric-value" id="tax-net">£0</div><div class="metric-sub neu">gains minus losses</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--amber),transparent);"></div><div class="metric-label">Dividend Income</div><div class="metric-value" id="tax-div">£0</div><div class="metric-sub neu">Income Tax applicable</div></div>
         </div>
-        <div id="bnb-warnings" style="margin-bottom:14px;"></div>
         <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
             <input type="checkbox" id="exclude-isa" onchange="renderTax()" style="width:15px;height:15px;accent-color:var(--accent);">
@@ -599,6 +625,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
             </div>
           </div>
           <div class="table-wrap" id="tax-disposals-table"><div style="padding:18px;text-align:center;font-size:12px;color:var(--text3);">No disposals in this tax year</div></div>
+          <div id="bnb-warnings" style="margin-top:14px;"></div>
         </div>
       </div>
     </div>
@@ -1245,7 +1272,7 @@ function mapBingXFutures(obj) {
   if(!asset||!qty) return null;
   // Close long = sell, Close short = buy (closing a short)
   const tradeType = isLong ? 'sell' : 'buy';
-  const t = {id:genId(),type:tradeType,asset:asset.toUpperCase(),description:pair,broker:'BingX',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:isLong?'Long':'Short',leverage,fees,feesGBP:0,class:'Crypto',notes:'Futures',tags:['futures'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null,_rawPnlUSDT:pnlRaw};
+  const t = {id:genId(),type:tradeType,asset:asset.toUpperCase(),description:pair,broker:'BingX',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:isLong?'Long':'Short',leverage,fees,feesGBP:0,class:'Crypto',subclass:'Futures',notes:'Futures',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null,_rawPnlUSDT:pnlRaw};
   return t;
 }
 
@@ -1283,7 +1310,7 @@ function mapBitgetFutures(obj) {
   // Close long = selling a long = sell type
   // Close short = buying back a short = buy type
   const tradeType=isLong?'sell':'buy';
-  return {id:genId(),type:tradeType,asset:asset.toUpperCase(),description:futures,broker:'Bitget',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:isLong?'Long':'Short',leverage:1,fees:0,feesGBP:0,class:'Crypto',subclass:'Futures',notes:'Futures',tags:['futures'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null,_rawPnlUSDT:pnlRaw};
+  return {id:genId(),type:tradeType,asset:asset.toUpperCase(),description:futures,broker:'Bitget',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:isLong?'Long':'Short',leverage:1,fees:0,feesGBP:0,class:'Crypto',subclass:'Futures',notes:'Futures',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null,_rawPnlUSDT:pnlRaw};
 }
 
 // Date parsers for specific formats
@@ -2003,6 +2030,7 @@ function renderPnL() {
   const periodLabel=isAll?'All time':from&&to?`${from.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})} – ${to.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})}`:'All time';
   $('pnl-realised').textContent=gbp(rFiltered);
   if($('pnl-period-label')) $('pnl-period-label').textContent=periodLabel;
+  if($('pnl-period-badge')) $('pnl-period-badge').textContent=periodLabel;
 
   // CGT allowance — always UK FY
   const rFY=realisedFY();
@@ -2012,9 +2040,35 @@ function renderPnL() {
   $('pnl-cgt').textContent=`${gbp(cgtUsed)} / £3,000`;
   $('pnl-cgt-sub').textContent=`£${Math.max(0,3000-cgtUsed).toLocaleString()} remaining · UK FY 25/26`;
 
-  const tags=pnlByTag();
-  $('pnl-by-tag-count').textContent=Object.keys(tags).length+' tags';
-  renderBarChart('pnl-chart',monthlyPnL(),120);
+  // Monthly P&L — numeric table with running cumulative
+  const monthly=monthlyPnL();
+  const monthlyEl=$('pnl-monthly-table');
+  if(!Object.keys(monthly).length){
+    monthlyEl.innerHTML='<div style="padding:18px;text-align:center;font-size:12px;color:var(--text3);">No closed trades in this period</div>';
+  } else {
+    const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const entries=Object.entries(monthly).sort();
+    let cumulative=0;
+    const rows=entries.map(([m,v])=>{
+      cumulative+=v;
+      const parts=m.split('-');
+      const lbl=parts.length>=2?`${months[parseInt(parts[1])-1]} ${parts[0]}`:`${m}`;
+      return `<tr>
+        <td style="color:var(--text3);font-size:13px;">${lbl}</td>
+        <td class="mono ${v>=0?'pos':'neg'}" style="text-align:right;">${gbp(v)}</td>
+        <td class="mono ${cumulative>=0?'pos':'neg'}" style="text-align:right;opacity:0.7;">${gbp(cumulative)}</td>
+      </tr>`;
+    }).join('');
+    monthlyEl.innerHTML=`<table>
+      <thead><tr><th>Month</th><th style="text-align:right;">P&amp;L</th><th style="text-align:right;">Cumulative</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="border-top:1px solid var(--border2);">
+        <td style="font-weight:600;padding-top:8px;">Total</td>
+        <td class="mono ${rFiltered>=0?'pos':'neg'}" style="text-align:right;font-weight:600;padding-top:8px;">${gbp(rFiltered)}</td>
+        <td></td>
+      </tr></tfoot>
+    </table>`;
+  }
 
   // P&L by Asset — with class and broker filters
   const classFilter=$('pnl-class-filter')?.value||'';
@@ -2025,10 +2079,9 @@ function renderPnL() {
     if(t.type!=='sell'||t.pnlGBP==null) return false;
     if(!inFilterRange(t.date)) return false;
     if(brokerFilter && normBroker(t.broker)!==brokerFilter) return false;
-    // Class filter
     if(classFilter==='Stock/ETF' && t.class!=='Stock/ETF') return false;
-    if(classFilter==='Crypto Spot' && !(t.class==='Crypto' && !(t.tags||[]).includes('futures'))) return false;
-    if(classFilter==='Crypto Futures' && !(t.class==='Crypto' && (t.tags||[]).includes('futures'))) return false;
+    if(classFilter==='Crypto Spot' && !(t.class==='Crypto' && t.subclass!=='Futures')) return false;
+    if(classFilter==='Crypto Futures' && !(t.class==='Crypto' && t.subclass==='Futures')) return false;
     return true;
   }).forEach(t=>{
     byAsset[t.asset]=byAsset[t.asset]||{pnl:0,count:0,class:t.class,broker:t.broker};
@@ -2036,13 +2089,30 @@ function renderPnL() {
   });
 
   const ae=$('pnl-by-asset');
-  if(!Object.keys(byAsset).length){ae.innerHTML='<div style="padding:16px;text-align:center;font-size:12px;color:var(--text3);">No closed trades in this period</div>';}
-  else ae.innerHTML=`<div style="display:flex;justify-content:flex-end;padding:8px 14px 0;"><button class="btn btn-secondary btn-sm" onclick="exportPnLCSV()">Export CSV</button></div><table><thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Trades</th><th>P&L</th></tr></thead><tbody>${Object.entries(byAsset).sort((a,b)=>b[1].pnl-a[1].pnl).map(([a,d])=>`<tr><td><strong>${a}</strong></td><td>${classBadge(d.class)}</td><td>${brokerTag(d.broker)}</td><td class="mono">${d.count}</td><td class="mono ${d.pnl>=0?'pos':'neg'}">${gbp(d.pnl)}</td></tr>`).join('')}</tbody></table>`;
-
-  // by tag
-  const te=$('pnl-by-tag');
-  if(!Object.keys(tags).length){te.innerHTML='<div style="font-size:12px;color:var(--text3);">No tags assigned yet. Add tags to trades to see breakdown here.</div>';}
-  else te.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:10px;">${Object.entries(tags).map(([tag,d])=>`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;min-width:150px;"><div style="font-size:12px;font-weight:500;margin-bottom:6px;">${tag}</div><div style="font-size:18px;font-weight:600;font-family:var(--mono);" class="${d.pnl>=0?'pos':'neg'}">${gbp(d.pnl)}</div><div style="font-size:11px;color:var(--text3);margin-top:3px;">${d.count} trade${d.count!==1?'s':''}</div></div>`).join('')}</div>`;
+  if(!Object.keys(byAsset).length){
+    ae.innerHTML='<div style="padding:16px;text-align:center;font-size:12px;color:var(--text3);">No closed trades in this period</div>';
+  } else {
+    const totalPnL=Object.values(byAsset).reduce((s,d)=>s+d.pnl,0);
+    ae.innerHTML=`<div style="display:flex;justify-content:flex-end;padding:8px 14px 0;gap:6px;">
+      <button class="btn btn-secondary btn-sm" onclick="exportPnLCSV()">Export CSV</button>
+    </div>
+    <table>
+      <thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Trades</th><th style="text-align:right;">P&amp;L</th></tr></thead>
+      <tbody>${Object.entries(byAsset).sort((a,b)=>b[1].pnl-a[1].pnl).map(([a,d])=>`
+        <tr>
+          <td><strong>${a}</strong></td>
+          <td>${classBadge(d.class)}</td>
+          <td>${brokerTag(d.broker)}</td>
+          <td class="mono">${d.count}</td>
+          <td class="mono ${d.pnl>=0?'pos':'neg'}" style="text-align:right;">${gbp(d.pnl)}</td>
+        </tr>`).join('')}
+      </tbody>
+      <tfoot><tr style="border-top:1px solid var(--border2);">
+        <td colspan="4" style="font-weight:600;padding-top:8px;">Total</td>
+        <td class="mono ${totalPnL>=0?'pos':'neg'}" style="text-align:right;font-weight:600;padding-top:8px;">${gbp(totalPnL)}</td>
+      </tr></tfoot>
+    </table>`;
+  }
 }
 
 function exportPnLCSV() {
@@ -2534,10 +2604,10 @@ $('d-date').value=today();
 $('date-from').addEventListener('change',()=>renderAll());
 $('date-to').addEventListener('change',()=>renderAll());
 
-// Init — default to All to show full history
-const allChip=document.querySelector('.date-chip[onclick*="all"]');
-if(allChip){allChip.classList.add('active');document.querySelector('.date-chip[onclick*="1m"]').classList.remove('active');}
-setFilter(allChip||document.querySelector('.date-chip.active'),'all');
+// Init — default to current UK FY
+const fyChip=document.querySelector('.date-chip[onclick*="\'fy\'"]');
+if(fyChip) fyChip.classList.add('active');
+setFilter(fyChip||document.querySelector('.date-chip'),'fy');
 loadLiveFX();
 setInterval(loadLiveFX,60000);
 load();
