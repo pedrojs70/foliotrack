@@ -528,7 +528,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
             <option value="Binance">Binance</option>
             <option value="Bybit">Bybit</option>
           </select>
-          <input type="text" id="trades-search" placeholder="Search asset, broker, tag..." oninput="renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;width:240px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+          <input type="text" id="trades-search" placeholder="Search asset, broker, tag..." oninput="tradesPage=1;renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;width:240px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
             <span id="selected-trades-count" style="font-size:12px;color:var(--text3);display:none;"></span>
@@ -894,6 +894,8 @@ let selectedTradeIds = new Set();
 let pendingBroker = null;
 let tradeFilterMode = 'all';
 let posFilterMode = 'all';
+let tradesPage = 1;
+const TRADES_PER_PAGE = 75;
 
 function getFilterDates() {
   const from = $('date-from')?.value;
@@ -2181,10 +2183,27 @@ function renderTrades() {
       (t.notes||'').toLowerCase().includes(q)
     );
   }
-  $('trades-sub').textContent=`${trades.length} trades · click rows to select for pairs`;
+  const totalTrades=trades.length;
+  const totalPages=Math.max(1,Math.ceil(totalTrades/TRADES_PER_PAGE));
+  if(tradesPage>totalPages) tradesPage=1;
+  const start=(tradesPage-1)*TRADES_PER_PAGE;
+  const paginated=trades.slice(start,start+TRADES_PER_PAGE);
+
+  $('trades-sub').textContent=`${totalTrades} trades · page ${tradesPage} of ${totalPages}`;
   const wrap=$('trades-table-wrap');
   if(!trades.length){wrap.innerHTML=emptyState('No trades yet','Import a CSV or add a trade.');return;}
-  wrap.innerHTML=`<table><thead><tr><th></th><th>Date</th><th>Type</th><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty</th><th>Price (orig)</th><th>FX</th><th>Value (orig)</th><th>Value (GBP)</th><th>Fees (GBP)</th><th>P&L</th><th>Tags</th><th>SL/TP</th><th></th></tr></thead><tbody>${trades.map(t=>{
+
+  // Pagination controls
+  const paginationHTML=totalPages>1?`
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 0;border-top:1px solid var(--border);">
+      <button class="btn btn-secondary btn-sm" onclick="setTradesPage(1)" ${tradesPage===1?'disabled':''}>«</button>
+      <button class="btn btn-secondary btn-sm" onclick="setTradesPage(${tradesPage-1})" ${tradesPage===1?'disabled':''}>‹ Prev</button>
+      <span style="font-size:12px;color:var(--text2);padding:0 8px;">${start+1}–${Math.min(start+TRADES_PER_PAGE,totalTrades)} of ${totalTrades}</span>
+      <button class="btn btn-secondary btn-sm" onclick="setTradesPage(${tradesPage+1})" ${tradesPage===totalPages?'disabled':''}>Next ›</button>
+      <button class="btn btn-secondary btn-sm" onclick="setTradesPage(${totalPages})" ${tradesPage===totalPages?'disabled':''}>»</button>
+    </div>`:'';
+
+  wrap.innerHTML=`<table><thead><tr><th></th><th>Date</th><th>Type</th><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty</th><th>Price (orig)</th><th>FX</th><th>Value (orig)</th><th>Value (GBP)</th><th>Fees (GBP)</th><th>P&L</th><th>Tags</th><th>SL/TP</th><th></th></tr></thead><tbody>${paginated.map(t=>{
     const isBuy=t.type==='buy';
     const pnlCell=t.pnlGBP!=null?`<span class="${t.pnlGBP>=0?'pos':'neg'}">${gbp(t.pnlGBP)}</span>`:'<span style="color:var(--text3);">—</span>';
     const origPrice=t.price?`${t.currency==='GBP'?'£':t.currency==='USDT'||t.currency==='USD'?'$':'€'}${t.price.toFixed(4)}`:'—';
@@ -2193,7 +2212,15 @@ function renderTrades() {
     const sel=selectedTradeIds.has(t.id)?'selected':'';
     const pairBadge=t.pairId?`<span class="badge badge-purple" style="font-size:10px;" title="${getPairName(t.pairId)}">pair</span>`:'';
     return `<tr class="selectable ${sel}" onclick="toggleTradeSelect('${t.id}',event)"><td>${pairBadge}</td><td style="color:var(--text3);font-size:12px;">${t.date}</td><td><span class="badge ${isBuy?'badge-green':'badge-red'}">${isBuy?'Buy':'Sell'}</span></td><td><strong>${t.asset}</strong></td><td>${classBadge(t.class)}</td><td>${brokerTag(t.broker)}</td><td><span class="badge ${t.side==='Short'?'badge-red':'badge-green'}" style="font-size:10px;">${t.side}</span></td><td class="mono">${qty(t.qty)}</td><td class="mono">${origPrice}</td><td class="mono" style="color:var(--text3);font-size:11px;">${t.fxRate&&t.fxRate!==1?t.fxRate.toFixed(4):'—'}</td><td class="mono" style="color:var(--text3);">${t.price&&t.currency!=='GBP'?`${t.currency==='USDT'||t.currency==='USD'?'$':'€'}${(t.qty*(t.price||0)).toFixed(2)}`:'—'}</td><td class="mono">${t.valueGBP?gbp(t.valueGBP):'—'}</td><td class="mono" style="color:var(--amber);">${t.feesGBP?gbp(t.feesGBP):'—'}</td><td class="mono">${pnlCell}</td><td>${tags||'—'}</td><td>${sltp}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();delTrade('${t.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`;
-  }).join('')}</tbody></table>`;
+  }).join('')}</tbody></table>${paginationHTML}`;
+}
+
+function setTradesPage(page) {
+  tradesPage=page;
+  renderTrades();
+  // Scroll to top of trades table
+  const wrap=$('trades-table-wrap');
+  if(wrap) wrap.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function renderDividends() {
@@ -2764,7 +2791,7 @@ function setFilter(el,period) {
 }
 
 function filterPos(f,el){posFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPositions();}
-function filterTrades(f,el){tradeFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTrades();}
+function filterTrades(f,el){tradeFilterMode=f;tradesPage=1;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTrades();}
 function openModal(id){$(id).classList.add('open');}
 function closeModal(id){$(id).classList.remove('open');}
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
@@ -2917,11 +2944,28 @@ async function refreshLivePrices() {
   if(cryptoTickers.length) {
     try {
       // CoinGecko uses full names — map common tickers
-      const tickerMap={'btc':'bitcoin','eth':'ethereum','xrp':'ripple','sol':'solana',
+      const tickerMap={
+        'btc':'bitcoin','eth':'ethereum','xrp':'ripple','sol':'solana',
         'bnb':'binancecoin','doge':'dogecoin','link':'chainlink','avax':'avalanche-2',
-        'uni':'uniswap','paxg':'pax-gold','xaut':'tether-gold','ondo':'ondo',
+        'uni':'uniswap','paxg':'pax-gold','xaut':'tether-gold','ondo':'ondo-finance',
         'bgb':'bitget-token','xlm':'stellar','fet':'fetch-ai','tao':'bittensor',
-        'usdc':'usd-coin','busd':'binance-usd','xaut':'tether-gold','gbg':'bgb'};
+        'ada':'cardano','dot':'polkadot','matic':'matic-network','pol':'matic-network',
+        'ltc':'litecoin','bch':'bitcoin-cash','atom':'cosmos','near':'near',
+        'arb':'arbitrum','op':'optimism','inj':'injective-protocol','sui':'sui',
+        'apt':'aptos','stx':'blockstack','imx':'immutable-x','rndr':'render-token',
+        'grt':'the-graph','sand':'the-sandbox','mana':'decentraland','axs':'axie-infinity',
+        'ftm':'fantom','algo':'algorand','icp':'internet-computer','fil':'filecoin',
+        'hbar':'hedera-hashgraph','vet':'vechain','theta':'theta-token',
+        'xtz':'tezos','aave':'aave','mkr':'maker','snx':'havven',
+        'crv':'curve-dao-token','comp':'compound-governance-token',
+        'shib':'shiba-inu','pepe':'pepe','floki':'floki','wif':'dogwifcoin',
+        'ton':'the-open-network','trx':'tron','xmr':'monero','etc':'ethereum-classic',
+        'bat':'basic-attention-token','chz':'chiliz','cro':'crypto-com-chain',
+        'cake':'pancakeswap-token','1inch':'1inch','sushi':'sushi',
+        'pendle':'pendle','wld':'worldcoin-wld','blur':'blur','ldo':'lido-dao',
+        'wbtc':'wrapped-bitcoin','usdc':'usd-coin','busd':'binance-usd','dai':'dai',
+        'fdusd':'first-digital-usd','s':'sonic-3'
+      };
       const ids=cryptoTickers.map(t=>tickerMap[t]||t).filter(Boolean).join(',');
       const res=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
       if(res.ok){
