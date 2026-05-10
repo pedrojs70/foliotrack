@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <style>
 :root {
   --bg:#f0f4f8;--bg2:#ffffff;--bg3:#e8edf3;--bg4:#dde4ed;--bg5:#d1dae6;
@@ -35,11 +36,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .pw-logo{font-size:22px;font-weight:700;color:var(--text);margin-bottom:4px;}
 .pw-logo span{color:var(--accent);}
 .pw-sub{font-size:13px;color:var(--text3);margin-bottom:24px;}
-.pw-input{width:100%;padding:10px 14px;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font);font-size:14px;background:var(--bg3);color:var(--text);outline:none;margin-bottom:12px;text-align:center;letter-spacing:2px;}
+.pw-input{width:100%;padding:10px 14px;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font);font-size:14px;background:var(--bg3);color:var(--text);outline:none;margin-bottom:12px;}
 .pw-input:focus{border-color:var(--accent);}
-.pw-btn{width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;}
+.pw-btn{width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;}
 .pw-btn:hover{background:var(--accent2);}
-.pw-error{font-size:12px;color:var(--red);margin-top:8px;display:none;}
+.pw-error{font-size:12px;color:var(--red);margin-top:4px;min-height:18px;}
 
 .app{display:flex;height:100vh;overflow:hidden;}
 
@@ -338,10 +339,11 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
 <div class="pw-screen" id="pw-screen">
   <div class="pw-card">
     <div class="pw-logo">Folio<span>Track</span></div>
-    <div class="pw-sub">Enter password to access your portfolio</div>
-    <input type="password" class="pw-input" id="pw-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPw()">
-    <button class="pw-btn" onclick="checkPw()">Unlock</button>
-    <div class="pw-error" id="pw-error">Incorrect password. Try again.</div>
+    <div class="pw-sub">Inicia sessão para aceder ao teu portfólio</div>
+    <input type="email" class="pw-input" id="pw-email" placeholder="Email" onkeydown="if(event.key==='Enter')$('pw-pass').focus()">
+    <input type="password" class="pw-input" id="pw-pass" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="pw-btn" onclick="doLogin()">Entrar</button>
+    <div class="pw-error" id="pw-error"></div>
   </div>
 </div>
 <div class="app" id="main-app" style="display:none">
@@ -412,6 +414,9 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
     <div class="sidebar-bottom">
       <div class="nav-item" onclick="openModal('modal-trade')" data-tip="Add Trade">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      </div>
+      <div class="nav-item" onclick="doLogout()" data-tip="Terminar sessão" style="color:var(--red)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </div>
       <div class="sync-status">
         <div class="sync-dot" id="sync-dot"></div>
@@ -2704,26 +2709,42 @@ $('date-from').addEventListener('change',()=>renderAll());
 $('date-to').addEventListener('change',()=>renderAll());
 
 // ============================================================
-// PASSWORD
+// FIREBASE AUTHENTICATION
 // ============================================================
-const PASSWORD = 'coloca_aqui_a_tua_password';
+const ALLOWED_UID = 'J5NIxUL6R2OUOFHVsxmFh6aY3uC3';
+const auth = firebase.auth();
 
-function checkPw() {
-  const val = $('pw-input').value;
-  if(val === PASSWORD) {
-    sessionStorage.setItem('ft_auth','1');
-    $('pw-screen').classList.remove('visible');
-    $('main-app').style.display='flex';
-    init();
-  } else {
-    $('pw-error').style.display='block';
-    $('pw-input').value='';
-    $('pw-input').focus();
-  }
+function doLogin() {
+  const email = $('pw-email').value.trim();
+  const pass = $('pw-pass').value;
+  const errEl = $('pw-error');
+  errEl.textContent = '';
+  if(!email || !pass){ errEl.textContent = 'Preenche email e password.'; return; }
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(cred => {
+      if(cred.user.uid !== ALLOWED_UID) {
+        auth.signOut();
+        errEl.textContent = 'Acesso não autorizado.';
+      }
+    })
+    .catch(e => {
+      errEl.textContent = 'Email ou password incorrectos.';
+    });
 }
 
+auth.onAuthStateChanged(user => {
+  if(user && user.uid === ALLOWED_UID) {
+    $('pw-screen').classList.remove('visible');
+    $('main-app').style.display = 'flex';
+    if(!window._appInited) { window._appInited = true; init(); }
+  } else {
+    $('pw-screen').classList.add('visible');
+    $('main-app').style.display = 'none';
+    setTimeout(()=>{ if($('pw-email')) $('pw-email').focus(); }, 100);
+  }
+});
+
 function init() {
-  // Init — default to UK FY 25/26
   const fyChip=document.querySelector('.date-chip[onclick*="fy2526"]');
   if(fyChip) fyChip.classList.add('active');
   setFilter(fyChip||document.querySelector('.date-chip'),'fy2526');
@@ -2732,23 +2753,9 @@ function init() {
   load();
 }
 
-// Check if already authenticated this session
-if(sessionStorage.getItem('ft_auth')==='1') {
-  $('pw-screen').classList.remove('visible');
-  $('main-app').style.display='flex';
-  init();
-} else {
-  $('pw-screen').classList.add('visible');
-  setTimeout(()=>$('pw-input').focus(), 100);
+function doLogout() {
+  if(confirm('Terminar sessão?')) auth.signOut();
 }
-
-// Mobile nav active state
-function updateMobileNav(view) {
-  document.querySelectorAll('.mob-item').forEach(el=>{
-    el.classList.toggle('active', el.dataset.view===view);
-  });
-}
-const _origShowView = showView;
 </script>
 
 <!-- MOBILE NAV -->
