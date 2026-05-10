@@ -2502,6 +2502,7 @@ document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click
 // Normalise HL broker name — old data may have 'HL', new data has 'Hargreaves Lansdown'
 function isHL(broker) { return broker==='HL'||broker==='Hargreaves Lansdown'; }
 function normBroker(broker) { return isHL(broker)?'Hargreaves Lansdown':broker; }
+function $(id){return document.getElementById(id);}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
 function today(){return new Date().toISOString().split('T')[0];}
 function gbp(n){return'£'+(Math.abs(n||0)).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});}
