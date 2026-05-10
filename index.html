@@ -488,7 +488,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
     <!-- POSITIONS -->
     <div id="view-positions" class="view">
       <div class="content">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
           <div class="tabs"><div class="tab active" onclick="filterPos('all',this)">All</div><div class="tab" onclick="filterPos('stocks',this)">Stocks &amp; ETFs</div><div class="tab" onclick="filterPos('crypto',this)">Crypto</div><div class="tab" onclick="filterPos('long',this)">Long</div><div class="tab" onclick="filterPos('short',this)">Short</div></div>
           <select id="pos-broker-filter" onchange="renderPositions()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;">
             <option value="">All Brokers</option>
@@ -499,15 +499,23 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
             <option value="Binance">Binance</option>
             <option value="Bybit">Bybit</option>
           </select>
+          <input type="text" id="pos-search" placeholder="Search asset..." oninput="renderPositions()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;width:180px;">
+          <select id="pos-sort" onchange="renderPositions()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;">
+            <option value="name">Sort: Name</option>
+            <option value="value_desc">Sort: Value ↓</option>
+            <option value="value_asc">Sort: Value ↑</option>
+            <option value="date_desc">Sort: Date ↓</option>
+            <option value="date_asc">Sort: Date ↑</option>
+          </select>
         </div>
-        <div class="card"><div class="card-head"><div><div class="card-title">Open Positions</div><div class="card-sub" id="pos-sub">—</div></div><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div><div class="table-wrap" id="pos-table-wrap"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-title">No positions</div></div></div></div>
+        <div id="pos-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;"></div>
+        <div class="card"><div class="card-head"><div><div class="card-title">Open Positions</div><div class="card-sub" id="pos-sub">—</div></div><div style="display:flex;gap:6px;align-items:center;"><span id="prices-status" style="font-size:11px;color:var(--text3);"></span><button class="btn btn-secondary btn-sm" onclick="refreshLivePrices()" id="btn-refresh-prices">↻ Refresh Prices</button><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div></div><div class="table-wrap" id="pos-table-wrap"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-title">No positions</div></div></div></div>
       </div>
     </div>
 
     <!-- TRADES -->
     <div id="view-trades" class="view">
       <div class="content">
-        <div id="pending-matches-container"></div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <div class="tabs" style="margin-bottom:0;"><div class="tab active" onclick="filterTrades('all',this)">All</div><div class="tab" onclick="filterTrades('buy',this)">Buys</div><div class="tab" onclick="filterTrades('sell',this)">Sells</div></div>
@@ -536,6 +544,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
         </div>
         <div class="notice notice-info" style="margin-bottom:12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><div class="notice-text">To create a pair: select 2+ trades by clicking on them, then click <strong>Create Pair</strong>.</div></div>
         <div class="card"><div class="card-head"><div><div class="card-title">Trade History</div><div class="card-sub" id="trades-sub">—</div></div><div style="display:flex;gap:6px;"><button class="btn btn-secondary btn-sm" onclick="exportTradesCSV()">Export CSV</button><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div></div><div class="table-wrap" id="trades-table-wrap"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></div><div class="empty-title">No trades yet</div></div></div></div>
+        <div id="pending-matches-container" style="margin-top:16px;"></div>
       </div>
     </div>
 
@@ -740,13 +749,22 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Export backup JSON
             </button>
-            <div style="border-top:1px solid var(--border);padding-top:12px;">
+            <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px;">
               <div style="font-size:13px;font-weight:500;margin-bottom:5px;">Restore from backup</div>
               <label class="btn btn-secondary" style="width:100%;justify-content:center;cursor:pointer;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 Import backup JSON
                 <input type="file" accept=".json" style="display:none;" onchange="importJSON(event)">
               </label>
+            </div>
+            <div style="border-top:1px solid var(--border);padding-top:12px;">
+              <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Recalcular taxas de câmbio</div>
+              <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">Actualiza as taxas históricas em falta para trades com £0.00</div>
+              <button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="recalcFxRates()" id="recalc-fx-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                Recalcular taxas em falta
+              </button>
+              <div id="recalc-fx-status" style="font-size:12px;color:var(--text3);margin-top:6px;text-align:center;"></div>
             </div>
           </div></div>
         </div>
@@ -1009,13 +1027,27 @@ async function deletePortfolio(id) {
 // ============================================================
 // FX
 // ============================================================
+// Stablecoins to exclude from positions/P&L
+const STABLECOINS = new Set(['USDC','USDT','BUSD','DAI','TUSD','USDD','FDUSD','PYUSD','USDP','GUSD']);
+function isStablecoin(asset) { return STABLECOINS.has((asset||'').toUpperCase()); }
+
 async function fx(currency, date) {
   if (currency === 'GBP') return 1;
   const key = `${currency}_${date}`;
   if (data.fxRates[key]) return data.fxRates[key];
   try {
     const base = currency === 'USDT' ? 'USD' : currency;
-    // Use frankfurter API
+    // Use exchangerate-api for historical rates (better CORS support)
+    const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${base}`);
+    if(res.ok) {
+      const d = await res.json();
+      const rate = d.rates?.GBP || null;
+      if(rate) { data.fxRates[key] = rate; return rate; }
+    }
+  } catch(e) {}
+  try {
+    // Fallback: frankfurter
+    const base = currency === 'USDT' ? 'USD' : currency;
     const res = await fetch(`https://api.frankfurter.app/${date}?from=${base}&to=GBP`);
     if(res.ok) {
       const d = await res.json();
@@ -1023,7 +1055,6 @@ async function fx(currency, date) {
       if(rate) { data.fxRates[key] = rate; return rate; }
     }
   } catch(e) {}
-  // Fallback: use approximate current rates
   const fallbacks = {'USD':0.79,'USDT':0.79,'EUR':0.86,'GBP':1};
   return fallbacks[currency] || 0.79;
 }
@@ -1824,6 +1855,8 @@ function getPositions() {
   // For everything else (IBKR stocks, BingX spot, HL, etc.) include all
   const tradesToProcess=[...data.trades]
     .filter(t=>{
+      // Exclude stablecoins from positions
+      if(isStablecoin(t.asset)) return false;
       // Exclude Bitget/BingX futures OPEN trades (Direction contains 'Open')
       // These are already accounted for in the Close trade P&L
       if((t.broker==='Bitget'||t.broker==='BingX') && t.notes==='Futures') {
@@ -2046,20 +2079,83 @@ function renderPositions() {
   const all=getPositions();
   let pos=all;
   const brokerFilter=$('pos-broker-filter')?.value||'';
+  const searchVal=($('pos-search')?.value||'').toLowerCase();
+  const sortVal=$('pos-sort')?.value||'name';
   if(posFilterMode==='stocks')pos=all.filter(p=>p.class!=='Crypto');
   else if(posFilterMode==='crypto')pos=all.filter(p=>p.class==='Crypto');
   else if(posFilterMode==='long')pos=all.filter(p=>p.side==='Long');
   else if(posFilterMode==='short')pos=all.filter(p=>p.side==='Short');
   else pos=all;
   if(brokerFilter) pos=pos.filter(p=>normBroker(p.broker)===brokerFilter);
+  if(searchVal) pos=pos.filter(p=>(p.asset||'').toLowerCase().includes(searchVal)||(p.broker||'').toLowerCase().includes(searchVal));
+  // Sort
+  if(sortVal==='name') pos.sort((a,b)=>a.asset.localeCompare(b.asset));
+  else if(sortVal==='value_desc') pos.sort((a,b)=>b.totalCostGBP-a.totalCostGBP);
+  else if(sortVal==='value_asc') pos.sort((a,b)=>a.totalCostGBP-b.totalCostGBP);
+  else if(sortVal==='date_desc') pos.sort((a,b)=>new Date(b.since)-new Date(a.since));
+  else if(sortVal==='date_asc') pos.sort((a,b)=>new Date(a.since)-new Date(b.since));
   $('pos-sub').textContent=`${pos.length} positions · ${gbp(pos.reduce((s,p)=>s+p.totalCostGBP,0))} cost basis`;
+
+  // Summary cards
+  const usdgbp=livePrices['__USDGBP__']||0.79;
+  let totalCost=0,totalMarket=0,hlCost=0,posWithPrice=0;
+  pos.forEach(p=>{
+    totalCost+=p.totalCostGBP;
+    if(isHL(p.broker)){hlCost+=p.totalCostGBP;return;}
+    const lp=livePrices[p.asset];
+    if(lp?.price){
+      const mv=p.class==='Crypto'?p.totalQty*lp.price*usdgbp:p.totalQty*lp.price*usdgbp;
+      totalMarket+=mv;posWithPrice++;
+    }
+  });
+  const unrealTotal=totalMarket-totalCost+hlCost;
+  const summaryEl=$('pos-summary');
+  if(summaryEl){
+    const hasLive=posWithPrice>0;
+    summaryEl.innerHTML=`
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Cost Basis</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:var(--text);">${gbp(totalCost)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;">${pos.length} positions</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Market Value</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:var(--text);">${hasLive?gbp(totalMarket):'—'}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;">${hasLive?`${posWithPrice} positions with live price`:'Click Refresh Prices'}</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Unrealised P&amp;L</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono);" class="${hasLive?(unrealTotal>=0?'pos':'neg'):''}">${hasLive?(unrealTotal>=0?'+':'')+gbp(unrealTotal):'—'}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;">excl. HL positions</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">HL (ISA) Cost Basis</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:var(--text);">${gbp(hlCost)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;">no live prices available</div>
+      </div>`;
+  }
   const wrap=$('pos-table-wrap');
   if(!pos.length){wrap.innerHTML=emptyState('No positions','Import a CSV to populate.');return;}
-  wrap.innerHTML=`<table><thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty Open</th><th>Avg Cost</th><th>Cost Basis</th><th>Method</th><th>SL / TP</th><th>Tags</th><th>Since</th></tr></thead><tbody>${pos.map(p=>{
-    const method=p.class==='Crypto'?'<span class="badge badge-gray tip" data-tip="First In First Out">FIFO</span>':'<span class="badge badge-gray tip" data-tip="HMRC Share Pooling">Pool</span>';
-    const sltp=`<div class="sltp-row">${p.sl?`<div class="sltp-item"><span class="sltp-lbl">SL</span><span class="sltp-val neg">${p.sl}</span></div>`:''}${p.tp?`<div class="sltp-item"><span class="sltp-lbl">TP</span><span class="sltp-val pos">${p.tp}</span></div>`:''}</div>`;
+  wrap.innerHTML=`<table><thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty Open</th><th>Avg Cost</th><th>Cost Basis</th><th>Live Price</th><th>Market Value</th><th>Unreal. P&L</th><th>Method</th><th>Since</th></tr></thead><tbody>${pos.map(p=>{
+    const method=p.class==='Crypto'?'<span class="badge badge-gray">FIFO</span>':'<span class="badge badge-gray">Pool</span>';
+    const lp=livePrices[p.asset];
+    const isIBKR=p.broker==='IBKR';
+    let livePriceCell='—',marketValCell='—',unrealCell='—';
+    if(lp&&lp.price&&isIBKR){
+      const marketVal=p.totalQty*lp.price;
+      const unrealPnl=marketVal-p.totalCostGBP;
+      livePriceCell=`<span class="mono">$${lp.price.toFixed(2)}</span>`;
+      marketValCell=`<span class="mono">${gbp(marketVal*livePrices['__USDGBP__']||marketVal*0.79)}</span>`;
+      unrealCell=`<span class="mono ${unrealPnl>=0?'pos':'neg'}">${unrealPnl>=0?'+':''}${gbp((unrealPnl)*(livePrices['__USDGBP__']||0.79))}</span>`;
+    } else if(lp&&lp.price&&p.class==='Crypto'){
+      const marketVal=p.totalQty*lp.price*(livePrices['__USDGBP__']||0.79);
+      const unrealPnl=marketVal-p.totalCostGBP;
+      livePriceCell=`<span class="mono">$${lp.price.toFixed(4)}</span>`;
+      marketValCell=`<span class="mono">${gbp(marketVal)}</span>`;
+      unrealCell=`<span class="mono ${unrealPnl>=0?'pos':'neg'}">${unrealPnl>=0?'+':''}${gbp(unrealPnl)}</span>`;
+    }
     const tags=(p.tags||[]).map(t=>`<span class="tag-pill">${t}</span>`).join('');
-    return `<tr><td><strong>${p.asset}</strong></td><td>${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td><td>${method}</td><td>${sltp||'—'}</td><td>${tags||'—'}</td><td style="color:var(--text3);font-size:12px;">${p.openDate}</td></tr>`;
+    return `<tr><td><strong>${p.asset}</strong></td><td>${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td><td>${livePriceCell}</td><td>${marketValCell}</td><td>${unrealCell}</td><td>${method}</td><td style="color:var(--text3);font-size:12px;">${p.openDate||p.since||'—'}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -2750,7 +2846,100 @@ function init() {
   setFilter(fyChip||document.querySelector('.date-chip'),'fy2526');
   loadLiveFX();
   setInterval(loadLiveFX,60000);
-  load();
+  load().then(()=>refreshLivePrices());
+}
+
+async function recalcFxRates() {
+  const btn=$('recalc-fx-btn'), status=$('recalc-fx-status');
+  if(!btn) return;
+  btn.disabled=true;
+  const missing=data.trades.filter(t=>t.currency&&t.currency!=='GBP'&&(!t.fxRate||t.fxRate===0||!t.priceGBP));
+  if(!missing.length){status.textContent='Todas as taxas já estão calculadas.';btn.disabled=false;return;}
+  status.textContent=`A recalcular ${missing.length} trades...`;
+  let done=0,failed=0;
+  for(const t of missing) {
+    try {
+      const rate=await fx(t.currency,t.date);
+      if(rate&&rate>0) {
+        t.fxRate=rate;
+        t.priceGBP=+(t.price*rate).toFixed(4);
+        t.valueGBP=+(t.qty*t.priceGBP).toFixed(2);
+        if(t.fees) t.feesGBP=+(t.fees*rate).toFixed(2);
+        done++;
+      } else { failed++; }
+    } catch(e){ failed++; }
+    status.textContent=`${done+failed}/${missing.length} processadas...`;
+    await new Promise(r=>setTimeout(r,300));
+  }
+  autoMatchAll();
+  await save();
+  renderAll();
+  status.textContent=`Concluído: ${done} actualizadas, ${failed} falhadas.`;
+  btn.disabled=false;
+}
+
+// Live prices cache
+let livePrices = {};
+
+async function refreshLivePrices() {
+  const btn=$('btn-refresh-prices');
+  const status=$('prices-status');
+  if(btn) btn.disabled=true;
+  if(status) status.textContent='Fetching prices...';
+
+  const pos=getPositions();
+  const ibkrTickers=pos.filter(p=>p.broker==='IBKR').map(p=>p.asset);
+  const cryptoTickers=pos.filter(p=>p.class==='Crypto').map(p=>p.asset.toLowerCase());
+
+  // Get live USD/GBP rate first
+  try {
+    const res=await fetch('https://open.er-api.com/v6/latest/USD');
+    if(res.ok){const d=await res.json();if(d.rates?.GBP) livePrices['__USDGBP__']=d.rates.GBP;}
+  } catch(e){}
+  if(!livePrices['__USDGBP__']) livePrices['__USDGBP__']=0.79;
+
+  let fetched=0;
+
+  // Fetch IBKR stock prices via Yahoo Finance
+  for(const ticker of ibkrTickers) {
+    try {
+      const res=await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`);
+      if(res.ok){
+        const d=await res.json();
+        const price=d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        if(price){livePrices[ticker]={price,source:'yahoo'};fetched++;}
+      }
+    } catch(e){}
+    await new Promise(r=>setTimeout(r,200));
+  }
+
+  // Fetch crypto prices via CoinGecko
+  if(cryptoTickers.length) {
+    try {
+      // CoinGecko uses full names — map common tickers
+      const tickerMap={'btc':'bitcoin','eth':'ethereum','xrp':'ripple','sol':'solana',
+        'bnb':'binancecoin','doge':'dogecoin','link':'chainlink','avax':'avalanche-2',
+        'uni':'uniswap','paxg':'pax-gold','xaut':'tether-gold','ondo':'ondo',
+        'bgb':'bitget-token','xlm':'stellar','fet':'fetch-ai','tao':'bittensor',
+        'usdc':'usd-coin','busd':'binance-usd','xaut':'tether-gold','gbg':'bgb'};
+      const ids=cryptoTickers.map(t=>tickerMap[t]||t).filter(Boolean).join(',');
+      const res=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
+      if(res.ok){
+        const d=await res.json();
+        cryptoTickers.forEach(ticker=>{
+          const id=tickerMap[ticker]||ticker;
+          if(d[id]?.usd){
+            livePrices[ticker.toUpperCase()]={price:d[id].usd,source:'coingecko'};
+            fetched++;
+          }
+        });
+      }
+    } catch(e){}
+  }
+
+  if(status) status.textContent=`${fetched} prices updated · 15min delay`;
+  if(btn) btn.disabled=false;
+  renderPositions();
 }
 
 function doLogout() {
