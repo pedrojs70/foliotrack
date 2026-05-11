@@ -2106,8 +2106,10 @@ function renderPositions() {
     if(isHL(p.broker)){hlCost+=p.totalCostGBP;return;}
     const lp=livePrices[p.asset];
     if(lp?.price){
-      const isGBPprice=lp.currency==='GBP';
-      const mv=p.class==='Crypto'?p.totalQty*lp.price*usdgbp:isGBPprice?p.totalQty*lp.price:p.totalQty*lp.price*usdgbp;
+      let mv=0;
+      if(p.class==='Crypto') mv=p.totalQty*lp.price*usdgbp;
+      else if(lp.currency==='GBP') mv=p.totalQty*lp.price;
+      else mv=p.totalQty*lp.price*usdgbp; // USD stocks
       totalMarket+=mv;posWithPrice++;
     }
   });
@@ -2139,25 +2141,40 @@ function renderPositions() {
   }
   const wrap=$('pos-table-wrap');
   if(!pos.length){wrap.innerHTML=emptyState('No positions','Import a CSV to populate.');return;}
-  wrap.innerHTML=`<table><thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty Open</th><th>Avg Cost</th><th>Cost Basis</th><th>Live Price</th><th>Market Value</th><th>Unreal. P&L</th><th>Method</th><th>Since</th></tr></thead><tbody>${pos.map(p=>{
+  wrap.innerHTML=`<table><thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty Open</th><th>Avg Cost</th><th>Cost Basis</th><th>Live Price</th><th>Market Value (GBP)</th><th>Unreal. P&L</th><th>Method</th><th>Since</th></tr></thead><tbody>${pos.map(p=>{
     const method=p.class==='Crypto'?'<span class="badge badge-gray">FIFO</span>':'<span class="badge badge-gray">Pool</span>';
     const lp=livePrices[p.asset];
-    const isIBKR=p.broker==='IBKR';
+    const usdgbp=livePrices['__USDGBP__']||0.79;
     let livePriceCell='—',marketValCell='—',unrealCell='—';
-    if(lp&&lp.price&&(p.broker==='IBKR'||p.class==='Stock/ETF')){
-      const isGBPprice = lp.currency==='GBP';
-      const marketValGBP = isGBPprice ? p.totalQty*lp.price : p.totalQty*lp.price*usdgbp;
-      const unrealPnl=marketValGBP-p.totalCostGBP;
-      livePriceCell=isGBPprice?`<span class="mono">£${lp.price.toFixed(2)}</span>`:`<span class="mono">$${lp.price.toFixed(2)}</span>`;
-      marketValCell=`<span class="mono">${gbp(marketValGBP)}</span>`;
-      unrealCell=`<span class="mono ${unrealPnl>=0?'pos':'neg'}">${unrealPnl>=0?'+':''}${gbp(unrealPnl)}</span>`;
-    } else if(lp&&lp.price&&p.class==='Crypto'){
-      const marketVal=p.totalQty*lp.price*(livePrices['__USDGBP__']||0.79);
-      const unrealPnl=marketVal-p.totalCostGBP;
-      livePriceCell=`<span class="mono">$${lp.price.toFixed(4)}</span>`;
-      marketValCell=`<span class="mono">${gbp(marketVal)}</span>`;
-      unrealCell=`<span class="mono ${unrealPnl>=0?'pos':'neg'}">${unrealPnl>=0?'+':''}${gbp(unrealPnl)}</span>`;
+
+    if(lp?.price) {
+      let marketValGBP=0;
+      let livePriceDisplay='';
+
+      if(p.class==='Crypto') {
+        // Crypto — price in USD, convert to GBP
+        marketValGBP = p.totalQty * lp.price * usdgbp;
+        livePriceDisplay = `$${lp.price.toFixed(lp.price<1?4:2)}`;
+      } else if(lp.currency==='GBP') {
+        // Already in GBP (HL ETFs, LSE stocks)
+        marketValGBP = p.totalQty * lp.price;
+        livePriceDisplay = `£${lp.price.toFixed(2)}`;
+      } else if(lp.currency==='USD') {
+        // USD stocks (IBKR US) — convert to GBP
+        marketValGBP = p.totalQty * lp.price * usdgbp;
+        livePriceDisplay = `$${lp.price.toFixed(2)}`;
+      } else {
+        // Fallback
+        marketValGBP = p.totalQty * lp.price;
+        livePriceDisplay = lp.price.toFixed(2);
+      }
+
+      const unrealPnl = marketValGBP - p.totalCostGBP;
+      livePriceCell = `<span class="mono">${livePriceDisplay}</span>`;
+      marketValCell = `<span class="mono">${gbp(marketValGBP)}</span>`;
+      unrealCell = `<span class="mono ${unrealPnl>=0?'pos':'neg'}">${unrealPnl>=0?'+':''}${gbp(unrealPnl)}</span>`;
     }
+
     const tags=(p.tags||[]).map(t=>`<span class="tag-pill">${t}</span>`).join('');
     return `<tr><td><strong>${p.asset}</strong></td><td>${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td><td>${livePriceCell}</td><td>${marketValCell}</td><td>${unrealCell}</td><td>${method}</td><td style="color:var(--text3);font-size:12px;">${p.openDate||p.since||'—'}</td></tr>`;
   }).join('')}</tbody></table>`;
