@@ -2154,7 +2154,8 @@ function renderPositions() {
       if(p.class==='Crypto') {
         // Crypto — price in USD, convert to GBP
         marketValGBP = p.totalQty * lp.price * usdgbp;
-        livePriceDisplay = `$${lp.price.toFixed(lp.price<1?4:2)}`;
+        const gbpPrice = lp.price * usdgbp;
+        livePriceDisplay = `£${gbpPrice.toFixed(gbpPrice<1?4:2)}`;
       } else if(lp.currency==='GBP') {
         // Already in GBP (HL ETFs, LSE stocks)
         marketValGBP = p.totalQty * lp.price;
