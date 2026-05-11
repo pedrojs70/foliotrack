@@ -2928,6 +2928,44 @@ async function refreshLivePrices() {
 
   let fetched=0;
 
+  // Fetch crypto prices via CoinGecko FIRST (fast single call)
+  if(cryptoTickers.length) {
+    try {
+      const tickerMap={
+        'btc':'bitcoin','eth':'ethereum','xrp':'ripple','sol':'solana',
+        'bnb':'binancecoin','doge':'dogecoin','link':'chainlink','avax':'avalanche-2',
+        'uni':'uniswap','paxg':'pax-gold','xaut':'tether-gold','ondo':'ondo-finance',
+        'bgb':'bitget-token','xlm':'stellar','fet':'fetch-ai','tao':'bittensor',
+        'ada':'cardano','dot':'polkadot','matic':'matic-network','pol':'matic-network',
+        'ltc':'litecoin','bch':'bitcoin-cash','atom':'cosmos','near':'near',
+        'arb':'arbitrum','op':'optimism','inj':'injective-protocol','sui':'sui',
+        'apt':'aptos','stx':'blockstack','imx':'immutable-x','rndr':'render-token',
+        'grt':'the-graph','sand':'the-sandbox','mana':'decentraland','axs':'axie-infinity',
+        'ftm':'fantom','algo':'algorand','icp':'internet-computer','fil':'filecoin',
+        'hbar':'hedera-hashgraph','vet':'vechain','theta':'theta-token',
+        'xtz':'tezos','aave':'aave','mkr':'maker','snx':'havven',
+        'crv':'curve-dao-token','comp':'compound-governance-token',
+        'shib':'shiba-inu','pepe':'pepe','floki':'floki','wif':'dogwifcoin',
+        'ton':'the-open-network','trx':'tron','xmr':'monero','etc':'ethereum-classic',
+        'bat':'basic-attention-token','chz':'chiliz','cro':'crypto-com-chain',
+        'cake':'pancakeswap-token','1inch':'1inch','sushi':'sushi',
+        'pendle':'pendle','wld':'worldcoin-wld','blur':'blur','ldo':'lido-dao',
+        'wbtc':'wrapped-bitcoin','usdc':'usd-coin','busd':'binance-usd','dai':'dai',
+        'fdusd':'first-digital-usd','s':'sonic-3'
+      };
+      const ids=cryptoTickers.map(t=>tickerMap[t]||t).filter(Boolean).join(',');
+      const res=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
+      if(res.ok){
+        const d=await res.json();
+        cryptoTickers.forEach(ticker=>{
+          const id=tickerMap[ticker]||ticker;
+          if(d[id]?.usd){livePrices[ticker.toUpperCase()]={price:d[id].usd,source:'coingecko'};fetched++;}
+        });
+      }
+    } catch(e){}
+  }
+  if(status) status.textContent=`${fetched} crypto prices fetched, loading stocks...`;
+
   const TWELVE_DATA_KEY = 'f6a53700d8c9439a86c3728a4822c862';
   const WORKER_URL = 'https://foliotrack-prices.pedrojs70.workers.dev';
 
@@ -3009,47 +3047,6 @@ async function refreshLivePrices() {
         await new Promise(r=>setTimeout(r,300));
       }
     }
-  }
-
-  // Fetch crypto prices via CoinGecko
-  if(cryptoTickers.length) {
-    try {
-      // CoinGecko uses full names — map common tickers
-      const tickerMap={
-        'btc':'bitcoin','eth':'ethereum','xrp':'ripple','sol':'solana',
-        'bnb':'binancecoin','doge':'dogecoin','link':'chainlink','avax':'avalanche-2',
-        'uni':'uniswap','paxg':'pax-gold','xaut':'tether-gold','ondo':'ondo-finance',
-        'bgb':'bitget-token','xlm':'stellar','fet':'fetch-ai','tao':'bittensor',
-        'ada':'cardano','dot':'polkadot','matic':'matic-network','pol':'matic-network',
-        'ltc':'litecoin','bch':'bitcoin-cash','atom':'cosmos','near':'near',
-        'arb':'arbitrum','op':'optimism','inj':'injective-protocol','sui':'sui',
-        'apt':'aptos','stx':'blockstack','imx':'immutable-x','rndr':'render-token',
-        'grt':'the-graph','sand':'the-sandbox','mana':'decentraland','axs':'axie-infinity',
-        'ftm':'fantom','algo':'algorand','icp':'internet-computer','fil':'filecoin',
-        'hbar':'hedera-hashgraph','vet':'vechain','theta':'theta-token',
-        'xtz':'tezos','aave':'aave','mkr':'maker','snx':'havven',
-        'crv':'curve-dao-token','comp':'compound-governance-token',
-        'shib':'shiba-inu','pepe':'pepe','floki':'floki','wif':'dogwifcoin',
-        'ton':'the-open-network','trx':'tron','xmr':'monero','etc':'ethereum-classic',
-        'bat':'basic-attention-token','chz':'chiliz','cro':'crypto-com-chain',
-        'cake':'pancakeswap-token','1inch':'1inch','sushi':'sushi',
-        'pendle':'pendle','wld':'worldcoin-wld','blur':'blur','ldo':'lido-dao',
-        'wbtc':'wrapped-bitcoin','usdc':'usd-coin','busd':'binance-usd','dai':'dai',
-        'fdusd':'first-digital-usd','s':'sonic-3'
-      };
-      const ids=cryptoTickers.map(t=>tickerMap[t]||t).filter(Boolean).join(',');
-      const res=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
-      if(res.ok){
-        const d=await res.json();
-        cryptoTickers.forEach(ticker=>{
-          const id=tickerMap[ticker]||ticker;
-          if(d[id]?.usd){
-            livePrices[ticker.toUpperCase()]={price:d[id].usd,source:'coingecko'};
-            fetched++;
-          }
-        });
-      }
-    } catch(e){}
   }
 
   if(status) status.textContent=`${fetched} prices updated · 15min delay`;
