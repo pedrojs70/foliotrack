@@ -2163,7 +2163,8 @@ function renderPositions() {
       } else if(lp.currency==='USD') {
         // USD stocks (IBKR US) — convert to GBP
         marketValGBP = p.totalQty * lp.price * usdgbp;
-        livePriceDisplay = `$${lp.price.toFixed(2)}`;
+        const gbpPrice = lp.price * usdgbp;
+        livePriceDisplay = `£${gbpPrice.toFixed(2)}`;
       } else {
         // Fallback
         marketValGBP = p.totalQty * lp.price;
