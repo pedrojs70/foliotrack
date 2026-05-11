@@ -2919,12 +2919,17 @@ async function refreshLivePrices() {
   const pos=getPositions();
   const cryptoTickers=pos.filter(p=>p.class==='Crypto').map(p=>p.asset.toLowerCase());
 
-  // Get live USD/GBP rate first
+  // Get live FX rates
   try {
     const res=await fetch('https://open.er-api.com/v6/latest/USD');
-    if(res.ok){const d=await res.json();if(d.rates?.GBP) livePrices['__USDGBP__']=d.rates.GBP;}
+    if(res.ok){
+      const d=await res.json();
+      if(d.rates?.GBP) livePrices['__USDGBP__']=d.rates.GBP;
+      if(d.rates?.GBP && d.rates?.EUR) livePrices['__EURGBP__']=d.rates.GBP/d.rates.EUR;
+    }
   } catch(e){}
   if(!livePrices['__USDGBP__']) livePrices['__USDGBP__']=0.79;
+  if(!livePrices['__EURGBP__']) livePrices['__EURGBP__']=0.86;
 
   let fetched=0;
 
@@ -2991,11 +2996,23 @@ async function refreshLivePrices() {
   };
 
   const ibkrYahooMap = {
-    'ACS':'ACS.MC','GALP':'GALP.LS','ALFEN':'ALFEN.AS',
-    'BAB':'BAB.L','BEEM':'BEEM.L','REP':'REP.MC',
-    'PSG':'PSG.MC','FAE':'FAE.MC','COCO':'COCO.L',
-    'NM5':'NIC.AX','INMD':null,'LFVN':null,
-    'PBR':null,'EC':null,'EPM':null,'BYRN':null,'NKE':null,
+    'ACS':  {ticker:'ACS.MC',  currency:'EUR'},
+    'GALP': {ticker:'GALP.LS', currency:'EUR'},
+    'ALFEN':{ticker:'ALFEN.AS',currency:'EUR'},
+    'BAB':  {ticker:'BAB.L',   currency:'GBP'},
+    'BEEM': {ticker:'BEEM.L',  currency:'GBP'},
+    'REP':  {ticker:'REP.MC',  currency:'EUR'},
+    'PSG':  {ticker:'PSG.MC',  currency:'EUR'},
+    'FAE':  {ticker:'FAE.MC',  currency:'EUR'},
+    'COCO': {ticker:'COCO.L',  currency:'GBP'},
+    'NM5':  {ticker:'NIC.AX',  currency:'AUD'},
+    'INMD': null,
+    'LFVN': null,
+    'PBR':  null,
+    'EC':   null,
+    'EPM':  null,
+    'BYRN': null,
+    'NKE':  null,
   };
 
   async function fetchYahooWorker(yahooTicker) {
@@ -3034,8 +3051,21 @@ async function refreshLivePrices() {
       } else if(mapped) {
         // Europeu → Yahoo via Cloudflare Worker
         try {
-          const price = await fetchYahooWorker(mapped);
-          if(price) { livePrices[p.asset]={price,source:'yahoo',currency:'GBP'}; fetched++; }
+          const price = await fetchYahooWorker(mapped.ticker);
+          if(price) {
+            // Convert to GBP based on currency
+            const cur = mapped.currency;
+            let gbpPrice = price;
+            if(cur === 'EUR') {
+              const eurGbp = livePrices['__EURGBP__'] || 0.86;
+              gbpPrice = price * eurGbp;
+            } else if(cur === 'AUD') {
+              gbpPrice = price * 0.50; // approximate AUD/GBP
+            }
+            // GBP prices from LSE are already in GBP (pence handled in fetchYahooWorker)
+            livePrices[p.asset]={price:gbpPrice, rawPrice:price, source:'yahoo', currency:'GBP'};
+            fetched++;
+          }
         } catch(e) {}
         await new Promise(r=>setTimeout(r,200));
       } else {
