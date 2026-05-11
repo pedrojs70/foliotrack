@@ -2931,76 +2931,9 @@ async function refreshLivePrices() {
   const TWELVE_DATA_KEY = 'f6a53700d8c9439a86c3728a4822c862';
 
   // HL full name → LSE ticker mapping
-  const hlNameToYahoo = {
-    'iShares Physical Metals plc Physical Gold ETC': 'SGLN.L',
-    'iShares Physical Metals plc Physical Silver ETC': 'SSLN.L',
-    'iShares Physical Metals plc Physical Platinum ETC': 'SPLT.L',
-    'iShares Physical Metals plc Physical Palladium ETC': 'SPDM.L',
-    'iShares II plc Global Clean Energy UCITS ETF (Dist)': 'INRG.L',
-    'Global X ETFs Silver Miners UCITS ETF USD Acc (GBP)': 'SILV.L',
-    'Invesco Physical Markets plc Physical Platinum ETC (GBP)': 'IPLT.L',
-    'Invesco Physical Markets plc Physical Palladium ETC (GBP)': 'IPAL.L',
-    'HANetf ICAV Future of European Defence UCITS ETF USD Acc': 'DEFN.L',
-    'Vanguard Funds Plc S&P 500 UCITS ETF USD ACC (GBP)': 'VUSA.L',
-    'Vanguard Funds Plc Global Aggreg Bond UCITS ETF GBP H Acc': 'VAGP.L',
-    'ARK Innovation UCITS ETF Class A USD Acc': 'ARKG.L',
-    'BP Plc Ordinary US$0.25': 'BP.L',
-    'Shell plc Ordinary EUR0.07': 'SHEL.L',
-    'Rio Tinto plc Ordinary 10p': 'RIO.L',
-    'Babcock International Group Ordinary 60p': 'BAB.L',
-    'Oxford Biomedica plc Ordinary 50p': 'OXB.L',
-  };
-
-  const ibkrEuropeanMap = {
-    'ACS':'ACS.MC','GALP':'GALP.LS','ALFEN':'ALFEN.AS',
-    'REP':'REP.MC','PSG':'PSG.MC','FAE':'FAE.MC',
-    'COCO':'COCO.L','BEEM':'BEEM.L',
-  };
-
-  const stockPositions = pos.filter(p => p.class === 'Stock/ETF');
-
-  // Step 1: HL positions → Yahoo Finance via allorigins proxy
-  const hlPositions = stockPositions.filter(p => isHL(normBroker(p.broker)));
-  for(const p of hlPositions) {
-    const yahooTicker = hlNameToYahoo[p.asset];
-    if(!yahooTicker) continue;
-    try {
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/'+yahooTicker+'?interval=1d&range=1d')}`;
-      const res = await fetch(proxyUrl);
-      if(res.ok) {
-        const wrapper = await res.json();
-        const d = JSON.parse(wrapper.contents);
-        const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
-        if(price) {
-          const gbpPrice = yahooTicker.endsWith('.L') ? price/100 : price;
-          livePrices[p.asset] = {price:gbpPrice, source:'yahoo', currency:'GBP'};
-          fetched++;
-        }
-      }
-    } catch(e) {}
-    await new Promise(r=>setTimeout(r,300));
-  }
-
-  // Step 2: IBKR European positions → Yahoo Finance via proxy
-  const ibkrEurPositions = stockPositions.filter(p => !isHL(normBroker(p.broker)) && ibkrEuropeanMap[p.asset]);
-  for(const p of ibkrEurPositions) {
-    const yahooTicker = ibkrEuropeanMap[p.asset];
-    try {
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/'+yahooTicker+'?interval=1d&range=1d')}`;
-      const res = await fetch(proxyUrl);
-      if(res.ok) {
-        const wrapper = await res.json();
-        const d = JSON.parse(wrapper.contents);
-        const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
-        if(price) { livePrices[p.asset] = {price, source:'yahoo', currency:'USD'}; fetched++; }
-      }
-    } catch(e) {}
-    await new Promise(r=>setTimeout(r,300));
-  }
-
-  // Step 3: IBKR US positions → Twelve Data (was working before)
-  const ibkrUsPositions = stockPositions.filter(p => !isHL(normBroker(p.broker)) && !ibkrEuropeanMap[p.asset]);
-  for(const p of ibkrUsPositions) {
+  // Stock prices via Twelve Data (US tickers only — European/HL not supported on free plan)
+  const stockPositions = pos.filter(p => p.class === 'Stock/ETF' && !isHL(normBroker(p.broker)));
+  for(const p of stockPositions) {
     try {
       const res = await fetch(`https://api.twelvedata.com/price?symbol=${p.asset}&apikey=${TWELVE_DATA_KEY}`);
       if(res.ok) {
