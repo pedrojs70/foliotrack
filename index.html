@@ -1701,16 +1701,36 @@ async function processFile(file, hint) {
     } else {d.valueGBP=d.gross;d.fxRate=1;}
   }
 
+  // Dedupe dividends against existing — sequential counter
+  const existingDivCount = {};
+  data.dividends.forEach(d=>{
+    const base=`${d.date}_${d.asset}_${d.gross}_${d.currency}`;
+    existingDivCount[base]=(existingDivCount[base]||0)+1;
+  });
+  const importDivCount = {};
+  const newDividends = result.dividends.filter(d=>{
+    const base=`${d.date}_${d.asset}_${d.gross}_${d.currency}`;
+    importDivCount[base]=(importDivCount[base]||0)+1;
+    const counter=importDivCount[base]-1;
+    const existingCount=existingDivCount[base]||0;
+    if(counter < existingCount) return false;
+    existingDivCount[base]=(existingDivCount[base]||0)+1;
+    return true;
+  });
+
   data.trades.push(...newTrades);
   data.trades.sort((a,b)=>new Date(a.date)-new Date(b.date));
-  data.dividends.push(...result.dividends);
-  data.imports.push({id:genId(),date:today(),broker:result.broker,filename:file.name,trades:newTrades.length,dividends:result.dividends.length,skipped,status:'done'});
+  data.dividends.push(...newDividends);
+  const skippedDiv = result.dividends.length - newDividends.length;
+  data.imports.push({id:genId(),date:today(),broker:result.broker,filename:file.name,trades:newTrades.length,dividends:newDividends.length,skipped,status:'done'});
 
   // Auto-match all sells
   autoMatchAll();
   await save();
   renderAll();
-  const msg = skipped>0 ? `✓ ${newTrades.length} trades imported, ${skipped} duplicates skipped` : `✓ ${newTrades.length} trades imported from ${result.broker}`;
+  const msg = skipped>0||skippedDiv>0
+    ? `✓ ${newTrades.length} trades, ${newDividends.length} dividends imported · ${skipped+skippedDiv} duplicates skipped`
+    : `✓ ${newTrades.length} trades, ${newDividends.length} dividends imported from ${result.broker}`;
   toast(msg,'success');
 }
 
