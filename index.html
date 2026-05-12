@@ -1788,13 +1788,27 @@ function autoMatchAll() {
     const openSells=[...data.trades].filter(t=>
       t.type==='sell'&&t.side==='Short'&&
       (t.asset||'').trim()===asset&&
+      t.broker===closeBuy.broker&&
       new Date(t.date)<=new Date(closeBuy.date)
     ).sort((a,b)=>new Date(a.date)-new Date(b.date));
     if(!openSells.length) continue;
-    const avgSellPriceGBP=openSells.reduce((s,t)=>s+(t.priceGBP||t.price||0),0)/openSells.length;
+
+    // Total value received when opening the short (proceeds)
+    const totalSellValueGBP=openSells.reduce((s,t)=>s+(t.valueGBP||0),0);
+    const totalSellQty=openSells.reduce((s,t)=>s+t.qty,0);
+    const avgSellValueGBP=totalSellQty>0?totalSellValueGBP/totalSellQty:0;
+
+    // Cost to close the short (what we pay to buy back)
+    const buyValueGBP=closeBuy.valueGBP||0;
     const buyPriceGBP=closeBuy.priceGBP||closeBuy.price||0;
-    closeBuy.costBasisGBP=+(closeBuy.qty*buyPriceGBP).toFixed(2);
-    closeBuy.pnlGBP=+(closeBuy.qty*(avgSellPriceGBP-buyPriceGBP)).toFixed(2);
+
+    // Short P&L = proceeds from opening - cost of closing
+    // Profit when buy price < sell price (bought back cheaper)
+    const closedQty=Math.min(closeBuy.qty, totalSellQty);
+    const openingProceeds=+(closedQty*avgSellValueGBP).toFixed(2);
+    const closingCost=+(closeBuy.qty*buyPriceGBP).toFixed(2);
+    closeBuy.costBasisGBP=closingCost;
+    closeBuy.pnlGBP=+(openingProceeds-closingCost).toFixed(2);
     closeBuy.matchedTo=openSells[0].id;
     openSells.forEach(s=>{ if(!s.matchedTo) s.matchedTo=closeBuy.id; });
   }
@@ -1888,26 +1902,49 @@ function getPositions() {
 
     if(t.type==='buy'){
       if(t.side==='Short'){
-        // Closing a short
-        p.totalQty=+(p.totalQty+t.qty).toFixed(8);
-        const cpu=Math.abs(p.totalQty)>0?p.totalCostGBP/Math.abs(p.totalQty+t.qty):0;
-        p.totalCostGBP=Math.max(0,p.totalCostGBP-cpu*t.qty);
+        // Closing a short — reduce qty towards zero
+        const prevQty = p.totalQty; // negative
+        p.totalQty = +(p.totalQty + t.qty).toFixed(8);
+        // Proportionally reduce cost basis
+        if(Math.abs(prevQty) > 0.000001) {
+          const fraction = Math.min(t.qty, Math.abs(prevQty)) / Math.abs(prevQty);
+          p.totalCostGBP = Math.max(0, p.totalCostGBP * (1 - fraction));
+        }
+        // If position fully closed or flipped to long, reset
+        if(p.totalQty >= 0) {
+          p.totalCostGBP = 0;
+          p.side = 'Long';
+          // If flipped to long (bought more than short qty)
+          if(p.totalQty > 0.000001) {
+            p.totalCostGBP = p.totalQty * (t.priceGBP || t.price || 0);
+          }
+        }
       } else {
         // Opening/adding to a long
-        p.totalQty=+(p.totalQty+t.qty).toFixed(8);
-        p.totalCostGBP+=(t.valueGBP||0);
+        p.totalQty = +(p.totalQty + t.qty).toFixed(8);
+        p.totalCostGBP += (t.valueGBP || 0);
       }
     } else {
       if(t.side==='Short'){
         // Opening/adding to a short
-        p.totalQty=+(p.totalQty-t.qty).toFixed(8);
-        p.totalCostGBP+=(t.valueGBP||0);
-        p.side='Short';
+        const prevQty = p.totalQty;
+        p.totalQty = +(p.totalQty - t.qty).toFixed(8);
+        // If was long and now flipped to short, reset cost basis
+        if(prevQty >= 0 && p.totalQty < 0) {
+          p.totalCostGBP = Math.abs(p.totalQty) * (t.priceGBP || t.price || 0);
+        } else {
+          p.totalCostGBP += (t.valueGBP || 0);
+        }
+        p.side = 'Short';
       } else {
         // Closing/reducing a long
-        const cpu=p.totalQty>0?p.totalCostGBP/p.totalQty:0;
-        p.totalQty=+(p.totalQty-t.qty).toFixed(8);
-        p.totalCostGBP=Math.max(0,p.totalCostGBP-cpu*t.qty);
+        const cpu = p.totalQty > 0 ? p.totalCostGBP / p.totalQty : 0;
+        p.totalQty = +(p.totalQty - t.qty).toFixed(8);
+        p.totalCostGBP = Math.max(0, p.totalCostGBP - cpu * t.qty);
+        // If fully closed, reset
+        if(Math.abs(p.totalQty) < 0.000001) {
+          p.totalCostGBP = 0;
+        }
       }
     }
     if(t.sl)p.sl=t.sl; if(t.tp)p.tp=t.tp;
