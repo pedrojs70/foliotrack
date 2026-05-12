@@ -898,6 +898,7 @@ let tradeFilterMode = 'all';
 let posFilterMode = 'all';
 let tradesPage = 1;
 const TRADES_PER_PAGE = 75;
+let currentPeriod = 'fy2526';
 
 function getFilterDates() {
   const from = $('date-from')?.value;
@@ -2267,15 +2268,17 @@ function renderPnL() {
   const {from,to}=getFilterDates();
   const rFiltered=realisedFiltered();
 
-  // Dynamic period label — use named labels for FY periods
-  const fromVal=$('date-from')?.value||'';
-  const toVal=$('date-to')?.value||'';
-  const isAll=fromVal==='2018-01-01'&&toVal==='2099-01-01';
-  const isFY2526=fromVal==='2025-04-01'&&toVal==='2026-03-31';
-  const isFY2425=fromVal==='2024-04-01'&&toVal==='2025-03-31';
-  const isFY2324=fromVal==='2023-04-01'&&toVal==='2024-03-31';
-  const periodLabel=isAll?'All time':isFY2526?'UK FY 25/26 (1 Apr 2025 – 31 Mar 2026)':isFY2425?'UK FY 24/25 (1 Apr 2024 – 31 Mar 2025)':isFY2324?'UK FY 23/24 (1 Apr 2023 – 31 Mar 2024)':from&&to?`${from.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})} – ${to.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`:'All time';
-  const badgeLabel=isAll?'All time':isFY2526?'UK FY 25/26':isFY2425?'UK FY 24/25':isFY2324?'UK FY 23/24':periodLabel;
+  // Dynamic period label — use currentPeriod for reliable FY detection
+  let badgeLabel, periodLabel;
+  if(currentPeriod==='all'){ badgeLabel='All time'; periodLabel='All time'; }
+  else if(currentPeriod==='fy2526'||currentPeriod==='fy'){ badgeLabel='UK FY 25/26'; periodLabel='UK FY 25/26 (1 Apr 2025 – 31 Mar 2026)'; }
+  else if(currentPeriod==='fy2425'){ badgeLabel='UK FY 24/25'; periodLabel='UK FY 24/25 (1 Apr 2024 – 31 Mar 2025)'; }
+  else if(currentPeriod==='fy2324'){ badgeLabel='UK FY 23/24'; periodLabel='UK FY 23/24 (1 Apr 2023 – 31 Mar 2024)'; }
+  else {
+    const fl=from?from.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'';
+    const tl=to?to.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'';
+    badgeLabel=`${fl} – ${tl}`; periodLabel=badgeLabel;
+  }
   $('pnl-realised').textContent=gbp(rFiltered);
   if($('pnl-period-label')) $('pnl-period-label').textContent=periodLabel;
   if($('pnl-period-badge')) $('pnl-period-badge').textContent=badgeLabel;
@@ -2795,6 +2798,7 @@ function showView(name) {
 }
 
 function setFilter(el,period) {
+  currentPeriod = period;
   document.querySelectorAll('.date-chip').forEach(c=>c.classList.remove('active'));
   if(el) el.classList.add('active');
   const now=new Date(),fmt=d=>d.toISOString().split('T')[0];
