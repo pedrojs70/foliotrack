@@ -1478,11 +1478,14 @@ function parseIBKR(rows) {
       if(!txType||!validTrades.includes(txType)) continue;
       if(!symbol||symbol==='-'||symbol.includes('.')) continue;
       if(!Math.abs(qty)||!price) continue;
-      const dedupeKey=`${dateStr}_${symbol}_${Math.abs(qty)}_${price}_${txType}`;
-      if(seen.has(dedupeKey)) continue;
+      // Sequential counter dedup — handles multiple identical trades on same day
+      const baseKey=`${dateStr}_${symbol}_${Math.abs(qty)}_${price}_${txType}`;
+      let counter=0;
+      while(seen.has(`${baseKey}_${counter}`)) counter++;
+      const dedupeKey=`${baseKey}_${counter}`;
       seen.add(dedupeKey);
       const isBuy=txType==='Buy'||txType==='BUY';
-      trades.push({id:genId(),type:isBuy?'buy':'sell',asset:symbol.toUpperCase(),description:obj['Description']||symbol,broker:'IBKR',date:parseDate(dateStr),qty:Math.abs(qty),price,currency,priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees:comm,feesGBP:0,class:'Stock/ETF',notes:'',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null});
+      trades.push({id:genId(),type:isBuy?'buy':'sell',asset:symbol.toUpperCase(),description:obj['Description']||symbol,broker:'IBKR',date:parseDate(dateStr),qty:Math.abs(qty),price,currency,priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees:comm,feesGBP:0,class:'Stock/ETF',notes:'',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null,_dedupeKey:dedupeKey});
     }
 
     // Separate Dividends section (some IBKR exports have this)
@@ -1655,12 +1658,22 @@ async function processFile(file, hint) {
   await snapshot(`Before import: ${file.name}`);
   toast(`Processing ${result.trades.length} trades, fetching FX rates...`,'info');
 
-  // Dedupe against existing trades in DB
-  const existingKeys = new Set(data.trades.map(t=>`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`));
+  // Dedupe against existing trades in DB using sequential counters
+  // This handles multiple identical trades on the same day (e.g. 2 BAB sells at same price)
+  const existingKeyCount = {};
+  data.trades.forEach(t=>{
+    const base=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`;
+    existingKeyCount[base]=(existingKeyCount[base]||0)+1;
+  });
+  const importKeyCount = {};
   const newTrades = result.trades.filter(t=>{
-    const k=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`;
-    if(existingKeys.has(k)) return false;
-    existingKeys.add(k);
+    const base=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`;
+    importKeyCount[base]=(importKeyCount[base]||0)+1;
+    const counter=importKeyCount[base]-1;
+    // Allow if existing count is less than import count for this key
+    const existingCount=existingKeyCount[base]||0;
+    if(counter < existingCount) return false; // already in DB
+    existingKeyCount[base]=(existingKeyCount[base]||0)+1;
     return true;
   });
   const skipped = result.trades.length - newTrades.length;
