@@ -2105,7 +2105,7 @@ function renderPositions() {
 
   // Summary cards
   const usdgbp=livePrices['__USDGBP__']||0.79;
-  let totalCost=0,totalMarket=0,hlCost=0,posWithPrice=0;
+  let totalCost=0,totalMarket=0,hlCost=0,posWithPrice=0,unrealTotal=0;
   pos.forEach(p=>{
     totalCost+=p.totalCostGBP;
     if(isHL(p.broker)){hlCost+=p.totalCostGBP;return;}
@@ -2114,11 +2114,13 @@ function renderPositions() {
       let mv=0;
       if(p.class==='Crypto') mv=p.totalQty*lp.price*usdgbp;
       else if(lp.currency==='GBP') mv=p.totalQty*lp.price;
-      else mv=p.totalQty*lp.price*usdgbp; // USD stocks
-      totalMarket+=mv;posWithPrice++;
+      else mv=p.totalQty*lp.price*usdgbp;
+      totalMarket+=mv;
+      posWithPrice++;
+      // Correct direction for long vs short
+      unrealTotal += p.side==='Short' ? p.totalCostGBP - mv : mv - p.totalCostGBP;
     }
   });
-  const unrealTotal=totalMarket-totalCost+hlCost;
   const summaryEl=$('pos-summary');
   if(summaryEl){
     const hasLive=posWithPrice>0;
@@ -2176,7 +2178,12 @@ function renderPositions() {
         livePriceDisplay = lp.price.toFixed(2);
       }
 
-      const unrealPnl = marketValGBP - p.totalCostGBP;
+      // Unrealised P&L:
+      // Long:  gain when price rises  → marketVal - costBasis
+      // Short: gain when price falls  → costBasis - marketVal
+      const unrealPnl = p.side==='Short'
+        ? p.totalCostGBP - marketValGBP
+        : marketValGBP - p.totalCostGBP;
       livePriceCell = `<span class="mono">${livePriceDisplay}</span>`;
       marketValCell = `<span class="mono">${gbp(marketValGBP)}</span>`;
       unrealCell = `<span class="mono ${unrealPnl>=0?'pos':'neg'}">${unrealPnl>=0?'+':''}${gbp(unrealPnl)}</span>`;
