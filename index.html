@@ -531,6 +531,8 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
           <input type="text" id="trades-search" placeholder="Search asset, broker, tag..." oninput="tradesPage=1;renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;width:240px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-secondary btn-sm" id="btn-undo" onclick="undoAction()" disabled title="Undo (Ctrl+Z)">↩ Undo</button>
+            <button class="btn btn-secondary btn-sm" id="btn-redo" onclick="redoAction()" disabled title="Redo (Ctrl+Shift+Z)">↪ Redo</button>
             <span id="selected-trades-count" style="font-size:12px;color:var(--text3);display:none;"></span>
             <button class="btn btn-danger btn-sm" id="btn-delete-selected" style="display:none;" onclick="deleteSelectedTrades()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
@@ -1456,7 +1458,9 @@ function parseIBKR(rows) {
       const obj={};
       headers.forEach((h,i)=>obj[h]=(row[i+2]||'').trim());
       const txType=(obj['Transaction Type']||'').trim();
-      const symbol=(obj['Symbol']||'').trim();
+      const rawSymbol=(obj['Symbol']||'').trim();
+      // Clean symbol — remove numeric prefixes (order IDs concatenated with ticker)
+      const symbol=rawSymbol.replace(/^\d+([A-Z]+)$/,'$1').replace(/^[0-9]{8,}/, '').trim();
       const dateStr=(obj['Date']||'').trim();
       const currency=(obj['Price Currency']||'USD').trim();
       const qty=parseFloat(obj['Quantity'])||0;
@@ -2263,14 +2267,18 @@ function renderPnL() {
   const {from,to}=getFilterDates();
   const rFiltered=realisedFiltered();
 
-  // Dynamic period label
+  // Dynamic period label — use named labels for FY periods
   const fromVal=$('date-from')?.value||'';
   const toVal=$('date-to')?.value||'';
   const isAll=fromVal==='2018-01-01'&&toVal==='2099-01-01';
-  const periodLabel=isAll?'All time':from&&to?`${from.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})} – ${to.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})}`:'All time';
+  const isFY2526=fromVal==='2025-04-01'&&toVal==='2026-03-31';
+  const isFY2425=fromVal==='2024-04-01'&&toVal==='2025-03-31';
+  const isFY2324=fromVal==='2023-04-01'&&toVal==='2024-03-31';
+  const periodLabel=isAll?'All time':isFY2526?'UK FY 25/26 (1 Apr 2025 – 31 Mar 2026)':isFY2425?'UK FY 24/25 (1 Apr 2024 – 31 Mar 2025)':isFY2324?'UK FY 23/24 (1 Apr 2023 – 31 Mar 2024)':from&&to?`${from.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})} – ${to.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`:'All time';
+  const badgeLabel=isAll?'All time':isFY2526?'UK FY 25/26':isFY2425?'UK FY 24/25':isFY2324?'UK FY 23/24':periodLabel;
   $('pnl-realised').textContent=gbp(rFiltered);
   if($('pnl-period-label')) $('pnl-period-label').textContent=periodLabel;
-  if($('pnl-period-badge')) $('pnl-period-badge').textContent=periodLabel;
+  if($('pnl-period-badge')) $('pnl-period-badge').textContent=badgeLabel;
 
   // CGT allowance — always UK FY
   const rFY=realisedFY();
@@ -2584,7 +2592,8 @@ async function deleteSelectedTrades() {
   const count=selectedTradeIds.size;
   if(!count)return;
   if(!confirm(`Delete ${count} selected trade${count>1?'s':''}? This cannot be undone.`))return;
-  // Get affected assets and clear their matches for clean recalculation
+  // Save to undo stack before deleting
+  pushUndo(data.trades, data.pendingMatches);
   const affectedAssets=new Set(
     data.trades.filter(t=>selectedTradeIds.has(t.id)).map(t=>(t.asset||'').trim())
   );
@@ -2600,14 +2609,16 @@ async function deleteSelectedTrades() {
   autoMatchAll();
   await save();
   renderAll();
-  toast(`${count} trade${count>1?'s':''} deleted`,'info');
+  toast(`${count} trade${count>1?'s':''} deleted — Ctrl+Z to undo`,'info');
 }
 
 async function delTrade(id) {
   if(!confirm('Delete this trade?'))return;
   const trade = data.trades.find(t=>t.id===id);
   if(!trade) return;
-  // Clear all matches for same asset so they get recalculated cleanly
+  // Save to undo stack
+  pushUndo(data.trades, data.pendingMatches);
+  // Clear matches for same asset
   const asset = (trade.asset||'').trim();
   data.trades.forEach(t=>{
     if((t.asset||'').trim()===asset && t.matchedTo && t.matchedTo!=='futures') {
@@ -2617,7 +2628,8 @@ async function delTrade(id) {
   data.trades = data.trades.filter(t=>t.id!==id);
   data.pendingMatches = data.pendingMatches.filter(m=>m!==id);
   autoMatchAll();
-  await save(); renderAll(); toast('Trade deleted','info');
+  await save(); renderAll();
+  toast('Trade deleted — Ctrl+Z to undo','info');
 }
 
 async function delDividend(id) {
@@ -2853,8 +2865,81 @@ $('date-from').addEventListener('change',()=>renderAll());
 $('date-to').addEventListener('change',()=>renderAll());
 
 // ============================================================
-// FIREBASE AUTHENTICATION
+// UNDO/REDO — stack of up to 5 operations
 // ============================================================
+const UNDO_STACK = [];
+const REDO_STACK = [];
+const MAX_UNDO = 5;
+
+function pushUndo(trades, pendingMatches) {
+  UNDO_STACK.push({ trades: trades.map(t=>({...t})), pendingMatches: [...pendingMatches] });
+  if(UNDO_STACK.length > MAX_UNDO) UNDO_STACK.shift();
+  REDO_STACK.length = 0; // Clear redo on new action
+  updateUndoButtons();
+}
+
+function updateUndoButtons() {
+  const btn = $('btn-undo');
+  const btnRedo = $('btn-redo');
+  if(btn) { btn.disabled = UNDO_STACK.length === 0; btn.title = UNDO_STACK.length ? `Undo (${UNDO_STACK.length} available)` : 'Nothing to undo'; }
+  if(btnRedo) { btnRedo.disabled = REDO_STACK.length === 0; }
+}
+
+async function undoAction() {
+  if(!UNDO_STACK.length) return;
+  // Save current state to redo stack
+  REDO_STACK.push({ trades: data.trades.map(t=>({...t})), pendingMatches: [...data.pendingMatches] });
+  // Restore previous state
+  const prev = UNDO_STACK.pop();
+  data.trades = prev.trades;
+  data.pendingMatches = prev.pendingMatches;
+  autoMatchAll();
+  await save();
+  renderAll();
+  toast('Undo — trade restored', 'info');
+  updateUndoButtons();
+}
+
+async function redoAction() {
+  if(!REDO_STACK.length) return;
+  UNDO_STACK.push({ trades: data.trades.map(t=>({...t})), pendingMatches: [...data.pendingMatches] });
+  const next = REDO_STACK.pop();
+  data.trades = next.trades;
+  data.pendingMatches = next.pendingMatches;
+  autoMatchAll();
+  await save();
+  renderAll();
+  toast('Redo', 'info');
+  updateUndoButtons();
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if((e.ctrlKey||e.metaKey) && e.key==='z' && !e.shiftKey) { e.preventDefault(); undoAction(); }
+  if((e.ctrlKey||e.metaKey) && (e.key==='y' || (e.key==='z' && e.shiftKey))) { e.preventDefault(); redoAction(); }
+});
+
+// ============================================================
+// INACTIVITY LOGOUT — 30 minutes
+// ============================================================
+let _inactivityTimer = null;
+const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+
+function resetInactivityTimer() {
+  if(_inactivityTimer) clearTimeout(_inactivityTimer);
+  _inactivityTimer = setTimeout(()=>{
+    if(auth.currentUser) {
+      auth.signOut();
+      toast('Sessão terminada por inactividade','info');
+    }
+  }, INACTIVITY_MS);
+}
+
+// Start inactivity timer on user events
+['click','keydown','mousemove','touchstart','scroll'].forEach(evt=>{
+  document.addEventListener(evt, resetInactivityTimer, {passive:true});
+});
+resetInactivityTimer();
 const ALLOWED_UID = 'J5NIxUL6R2OUOFHVsxmFh6aY3uC3';
 const auth = firebase.auth();
 
