@@ -1380,13 +1380,20 @@ async function parseBrokerExcel(arrayBuffer, hint) {
     }
   }
   else if(hint==='Bitget') {
-    // Spot: first sheet
+    // Spot: first sheet — CSV is newest-first, reverse to oldest-first
     const spotSheet = wb.Sheets[wb.SheetNames[0]];
     if(spotSheet) {
-      const rows = XLSX.utils.sheet_to_json(spotSheet);
+      const rows = XLSX.utils.sheet_to_json(spotSheet).reverse();
       for(const obj of rows) {
         const t = mapBitgetSpot(obj);
-        if(t) { const dk=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`; if(!_importSeen.has(dk)){_importSeen.add(dk);trades.push(t);} }
+        if(t) {
+          const baseKey=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`;
+          let counter=0;
+          while(_importSeen.has(`${baseKey}_${counter}`)) counter++;
+          const dk=`${baseKey}_${counter}`;
+          _importSeen.add(dk);
+          trades.push(t);
+        }
       }
     }
   }
@@ -1394,10 +1401,17 @@ async function parseBrokerExcel(arrayBuffer, hint) {
     broker='Bitget';
     const sheet = wb.Sheets[wb.SheetNames[0]];
     if(sheet) {
-      const rows = XLSX.utils.sheet_to_json(sheet);
+      const rows = XLSX.utils.sheet_to_json(sheet).reverse();
       for(const obj of rows) {
         const t = mapBitgetFutures(obj);
-        if(t) { const dk=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`; if(!_importSeen.has(dk)){_importSeen.add(dk);trades.push(t);} }
+        if(t) {
+          const baseKey=`${t.date}_${t.asset}_${t.qty}_${t.price}_${t.type}`;
+          let counter=0;
+          while(_importSeen.has(`${baseKey}_${counter}`)) counter++;
+          const dk=`${baseKey}_${counter}`;
+          _importSeen.add(dk);
+          trades.push(t);
+        }
       }
     }
   }
@@ -1838,9 +1852,22 @@ function autoMatchAll() {
   });
 
   // Step 2: Detect Long/Short using running quantity per asset+broker
-  const sorted=[...data.trades]
+  // Sort chronologically — use datetime if available, fall back to date
+  // For same date without time, preserve original array order (stable sort)
+  const withIndex = data.trades
     .filter(t=>t.matchedTo!=='futures')
-    .sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
+    .map((t,i)=>({t,i}));
+
+  withIndex.sort((a,b)=>{
+    const da = a.t.datetime ? new Date(a.t.datetime) : new Date(a.t.date+'T00:00');
+    const db2 = b.t.datetime ? new Date(b.t.datetime) : new Date(b.t.date+'T00:00');
+    if(isNaN(da)||isNaN(db2)) return 0;
+    const diff = da - db2;
+    if(diff !== 0) return diff;
+    return a.i - b.i; // stable: preserve original order for same timestamp
+  });
+
+  const sorted = withIndex.map(x=>x.t);
 
   const runQty={};
   sorted.forEach(t=>{
@@ -1856,11 +1883,21 @@ function autoMatchAll() {
     }
   });
 
-  // Step 3: Only match trades not already confirmed (matchedTo is null/undefined)
-  // This preserves manually confirmed matches
-  const toMatch=[...data.trades]
+  // Step 3: Only match trades not already confirmed
+  const toMatchWithIdx = data.trades
     .filter(t=>t.matchedTo!=='futures'&&!t.matchedTo)
-    .sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
+    .map((t,i)=>({t,i}));
+
+  toMatchWithIdx.sort((a,b)=>{
+    const da = a.t.datetime ? new Date(a.t.datetime) : new Date(a.t.date+'T00:00');
+    const db2 = b.t.datetime ? new Date(b.t.datetime) : new Date(b.t.date+'T00:00');
+    if(isNaN(da)||isNaN(db2)) return 0;
+    const diff = da - db2;
+    if(diff !== 0) return diff;
+    return a.i - b.i;
+  });
+
+  const toMatch = toMatchWithIdx.map(x=>x.t);
 
   // Match Long sells
   const longSells=toMatch.filter(t=>t.type==='sell'&&t.side==='Long');
