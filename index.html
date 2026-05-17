@@ -944,16 +944,31 @@ async function load() {
 }
 
 async function loadPortfolio(id) {
+  const CHUNK_SIZE = 300;
+  // Load main document (metadata + first chunk of trades)
   const doc = await db.collection('foliotrack').doc('portfolio_' + id).get();
-  if (doc.exists) {
+  if(doc.exists) {
     const d = doc.data();
-    data.trades = d.trades || [];
     data.dividends = d.dividends || [];
     data.imports = d.imports || [];
     data.snapshots = d.snapshots || [];
     data.pairs = d.pairs || [];
     data.fxRates = d.fxRates || {};
     data.pendingMatches = d.pendingMatches || [];
+    const totalChunks = d.tradeChunks || 0;
+    // Load trade chunks
+    if(totalChunks === 0) {
+      // Legacy: trades stored in main doc
+      data.trades = d.trades || [];
+    } else {
+      data.trades = [];
+      const chunkPromises = [];
+      for(let i = 0; i < totalChunks; i++) {
+        chunkPromises.push(db.collection('foliotrack').doc(`portfolio_${id}_trades_${i}`).get());
+      }
+      const chunks = await Promise.all(chunkPromises);
+      chunks.forEach(c => { if(c.exists) data.trades.push(...(c.data().trades || [])); });
+    }
   } else {
     data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[] };
   }
@@ -962,16 +977,35 @@ async function loadPortfolio(id) {
 async function save() {
   sync('syncing','Saving...');
   try {
+    const CHUNK_SIZE = 300;
+    const trades = data.trades;
+    const totalChunks = Math.ceil(trades.length / CHUNK_SIZE) || 0;
+
+    // Save trade chunks in parallel
+    const chunkPromises = [];
+    for(let i = 0; i < totalChunks; i++) {
+      const chunk = trades.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+      chunkPromises.push(
+        db.collection('foliotrack').doc(`portfolio_${currentPortfolioId}_trades_${i}`).set({ trades: chunk })
+      );
+    }
+    await Promise.all(chunkPromises);
+
+    // Save main document (metadata only, no trades)
     await db.collection('foliotrack').doc('portfolio_' + currentPortfolioId).set({
-      trades: data.trades, dividends: data.dividends, imports: data.imports,
-      snapshots: data.snapshots.slice(-20), pairs: data.pairs,
-      fxRates: data.fxRates, pendingMatches: data.pendingMatches,
+      tradeChunks: totalChunks,
+      dividends: data.dividends,
+      imports: data.imports,
+      snapshots: data.snapshots.slice(-20),
+      pairs: data.pairs,
+      fxRates: data.fxRates,
+      pendingMatches: data.pendingMatches,
       updatedAt: new Date().toISOString()
     });
     await db.collection('foliotrack').doc('portfolios').set({ list: portfolios });
     sync('ok','Saved');
     setTimeout(()=>sync('ok','Connected'),2000);
-  } catch(e) { sync('error','Save failed'); toast('Save failed','error'); }
+  } catch(e) { sync('error','Save failed'); toast('Save failed: '+e.message,'error'); }
 }
 
 function sync(state, text) {
