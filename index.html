@@ -992,7 +992,7 @@ async function save() {
     await Promise.all(chunkPromises);
 
     // Save main document (metadata only, no trades)
-    await db.collection('foliotrack').doc('portfolio_' + currentPortfolioId).set({
+    const mainDoc = {
       tradeChunks: totalChunks,
       dividends: data.dividends,
       imports: data.imports,
@@ -1001,11 +1001,14 @@ async function save() {
       fxRates: data.fxRates,
       pendingMatches: data.pendingMatches,
       updatedAt: new Date().toISOString()
-    });
+    };
+    console.log('[save] saving main doc with imports:', mainDoc.imports.length, 'trades chunks:', totalChunks);
+    await db.collection('foliotrack').doc('portfolio_' + currentPortfolioId).set(mainDoc);
+    console.log('[save] main doc saved ok');
     await db.collection('foliotrack').doc('portfolios').set({ list: portfolios });
     sync('ok','Saved');
     setTimeout(()=>sync('ok','Connected'),2000);
-  } catch(e) { sync('error','Save failed'); toast('Save failed: '+e.message,'error'); }
+  } catch(e) { sync('error','Save failed'); toast('Save failed: '+e.message,'error'); console.error('[save] error:', e); }
 }
 
 function sync(state, text) {
