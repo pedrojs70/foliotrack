@@ -1449,8 +1449,9 @@ function mapBitgetSpot(obj) {
   const price=parseFloat(obj['Average Price']||obj['Price']||0);
   const dateStr=obj['Date']||'';
   const date=parseDateMDY(dateStr);
+  const datetime=parseDateMDYFull(dateStr);
   if(!base||!qty||!price) return null;
-  return {id:genId(),type:dir,asset:base.toUpperCase(),description:pair,broker:'Bitget',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees:0,feesGBP:0,class:'Crypto',subclass:'Spot',notes:'',tags:['spot'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null};
+  return {id:genId(),type:dir,asset:base.toUpperCase(),description:pair,broker:'Bitget',date,datetime,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees:0,feesGBP:0,class:'Crypto',subclass:'Spot',notes:'',tags:['spot'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null};
 }
 
 function mapBitgetFutures(obj) {
@@ -1466,12 +1467,13 @@ function mapBitgetFutures(obj) {
   const price=parseFloat(obj['Average Price']||0);
   const dateStr=obj['Date']||'';
   const date=parseDateMDY(dateStr);
+  const datetime=parseDateMDYFull(dateStr);
   const pnlRaw=parseFloat(obj['Realized P/L']||obj['NetProfits']||0);
   if(!asset||!qty) return null;
   // Close long = selling a long = sell type
   // Close short = buying back a short = buy type
   const tradeType=isLong?'sell':'buy';
-  return {id:genId(),type:tradeType,asset:asset.toUpperCase(),description:futures,broker:'Bitget',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:isLong?'Long':'Short',leverage:1,fees:0,feesGBP:0,class:'Crypto',subclass:'Futures',notes:'Futures',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null,_rawPnlUSDT:pnlRaw};
+  return {id:genId(),type:tradeType,asset:asset.toUpperCase(),description:futures,broker:'Bitget',date,datetime,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:isLong?'Long':'Short',leverage:1,fees:0,feesGBP:0,class:'Crypto',subclass:'Futures',notes:'Futures',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null,_rawPnlUSDT:pnlRaw};
 }
 
 // Date parsers for specific formats
@@ -1486,14 +1488,28 @@ function parseDateISO(str) {
 function parseDateMDY(str) {
   if(!str) return today();
   // Format: 5/4/26 17:12 or 5/4/2026 17:12
-  const m = str.toString().match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  const m = str.toString().match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*(\d{1,2}:\d{2})?/);
   if(m) {
     const y = m[3].length===2 ? '20'+m[3] : m[3];
-    return `${y}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+    const dateOnly = `${y}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+    return dateOnly;
   }
   const d = new Date(str);
   if(!isNaN(d)) return d.toISOString().split('T')[0];
   return today();
+}
+
+function parseDateMDYFull(str) {
+  // Returns full datetime string for sorting: "2026-05-01T13:47"
+  if(!str) return today()+'T00:00';
+  const m = str.toString().match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*(\d{1,2}:\d{2})?/);
+  if(m) {
+    const y = m[3].length===2 ? '20'+m[3] : m[3];
+    const dateOnly = `${y}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+    const time = m[4] || '00:00';
+    return `${dateOnly}T${time}`;
+  }
+  return today()+'T00:00';
 }
 
 function parseIBKR(rows) {
@@ -1783,7 +1799,7 @@ async function processFile(file, hint) {
   });
 
   data.trades.push(...newTrades);
-  data.trades.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  data.trades.sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
   data.dividends.push(...newDividends);
   const skippedDiv = result.dividends.length - newDividends.length;
   data.imports.push({id:genId(),date:today(),broker:result.broker,filename:file.name,trades:newTrades.length,dividends:newDividends.length,skipped,status:'done'});
@@ -1824,7 +1840,7 @@ function autoMatchAll() {
   // Step 2: Detect Long/Short using running quantity per asset+broker
   const sorted=[...data.trades]
     .filter(t=>t.matchedTo!=='futures')
-    .sort((a,b)=>new Date(a.date)-new Date(b.date));
+    .sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
 
   const runQty={};
   sorted.forEach(t=>{
@@ -1844,7 +1860,7 @@ function autoMatchAll() {
   // This preserves manually confirmed matches
   const toMatch=[...data.trades]
     .filter(t=>t.matchedTo!=='futures'&&!t.matchedTo)
-    .sort((a,b)=>new Date(a.date)-new Date(b.date));
+    .sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
 
   // Match Long sells
   const longSells=toMatch.filter(t=>t.type==='sell'&&t.side==='Long');
@@ -1866,7 +1882,7 @@ function autoMatchAll() {
       sell.matchedTo='pool';
     } else {
       let rem=sell.qty, cost=0;
-      for(const lot of buys.sort((a,b)=>new Date(a.date)-new Date(b.date))){
+      for(const lot of buys.sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date))){
         if(rem<=0) break;
         const used=Math.min(rem,lot.qty);
         cost+=used*(lot.priceGBP||lot.price||0);
@@ -1887,7 +1903,7 @@ function autoMatchAll() {
       (t.asset||'').trim()===asset&&
       t.broker===closeBuy.broker&&
       new Date(t.date)<=new Date(closeBuy.date)
-    ).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    ).sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
     if(!openSells.length) continue;
 
     // Total value received when opening the short (proceeds)
@@ -1984,7 +2000,7 @@ function getPositions() {
       }
       return true;
     })
-    .sort((a,b)=>new Date(a.date)-new Date(b.date));
+    .sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
 
   tradesToProcess.forEach(t=>{
     const asset=(t.asset||'').trim();
@@ -2329,7 +2345,7 @@ function renderPositions() {
 }
 
 function renderTrades() {
-  let trades=[...data.trades].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  let trades=[...data.trades].sort((a,b)=>new Date(b.datetime||b.date)-new Date(a.datetime||a.date));
   if(tradeFilterMode==='buy')trades=trades.filter(t=>t.type==='buy');
   else if(tradeFilterMode==='sell')trades=trades.filter(t=>t.type==='sell');
   else if(tradeFilterMode==='stocks')trades=trades.filter(t=>t.class==='Stock/ETF');
@@ -2403,7 +2419,7 @@ function renderDividends() {
   $('div-net').textContent=gbp(netTotal);
   const wrap=$('div-table-wrap');
   if(!data.dividends.length){wrap.innerHTML=emptyState('No dividends yet','Dividends from IBKR and HL CSVs are detected automatically on import.');return;}
-  const rows=[...data.dividends].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(d=>`<tr><td style="font-size:12px;color:var(--text3);">${d.date}</td><td><strong>${d.asset}</strong></td><td>${brokerTag(d.broker)}</td><td class="mono">${d.currency} ${(d.gross||0).toFixed(2)}</td><td class="mono" style="color:var(--red);">-${(d.wht||0).toFixed(2)}</td><td class="mono pos">${gbp(d.valueGBP||d.gross||0)}</td><td><button class="btn btn-danger btn-sm" onclick="delDividend('${d.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`).join('');
+  const rows=[...data.dividends].sort((a,b)=>new Date(b.datetime||b.date)-new Date(a.datetime||a.date)).map(d=>`<tr><td style="font-size:12px;color:var(--text3);">${d.date}</td><td><strong>${d.asset}</strong></td><td>${brokerTag(d.broker)}</td><td class="mono">${d.currency} ${(d.gross||0).toFixed(2)}</td><td class="mono" style="color:var(--red);">-${(d.wht||0).toFixed(2)}</td><td class="mono pos">${gbp(d.valueGBP||d.gross||0)}</td><td><button class="btn btn-danger btn-sm" onclick="delDividend('${d.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`).join('');
   wrap.innerHTML=`<table><thead><tr><th>Date</th><th>Asset</th><th>Broker</th><th>Gross (orig)</th><th>WHT</th><th>Net (GBP)</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
@@ -2525,7 +2541,7 @@ function exportPnLCSV() {
 }
 
 function exportTradesCSV() {
-  const trades=[...data.trades].filter(t=>inFilterRange(t.date)).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const trades=[...data.trades].filter(t=>inFilterRange(t.date)).sort((a,b)=>new Date(b.datetime||b.date)-new Date(a.datetime||a.date));
   const csv='Date,Type,Asset,Class,Broker,Side,Qty,Price (orig),Currency,FX Rate,Value (GBP),Fees (GBP),P&L (GBP),Tags,Notes\n'+
     trades.map(t=>`${t.date},${t.type},${t.asset},${t.class},${t.broker},${t.side},${t.qty},${t.price||0},${t.currency},${t.fxRate||1},${(t.valueGBP||0).toFixed(2)},${(t.feesGBP||0).toFixed(2)},${t.pnlGBP!=null?(t.pnlGBP||0).toFixed(2):''},"${(t.tags||[]).join(',')}","${t.notes||''}"`).join('\n');
   dlBlob(csv,'text/csv',`foliotrack-trades-${today()}.csv`);
@@ -2588,7 +2604,7 @@ function renderFees() {
   // fee detail table — filtered
   const ft=$('fees-table');
   if(!filteredFees.length){ft.innerHTML='<div style="padding:16px;text-align:center;font-size:12px;color:var(--text3);">No fees in this period</div>';return;}
-  const rows=[...filteredFees].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(t=>`<tr><td style="font-size:12px;color:var(--text3);">${t.date}</td><td><strong>${t.asset}</strong></td><td>${brokerTag(t.broker)}</td><td><span class="badge ${t.type==='buy'?'badge-green':'badge-red'}">${t.type}</span></td><td class="mono" style="color:var(--amber);">${gbp(t.feesGBP)}</td><td class="mono" style="color:var(--text3);">${t.fees?`${t.currency} ${t.fees.toFixed(4)}`:'—'}</td></tr>`).join('');
+  const rows=[...filteredFees].sort((a,b)=>new Date(b.datetime||b.date)-new Date(a.datetime||a.date)).map(t=>`<tr><td style="font-size:12px;color:var(--text3);">${t.date}</td><td><strong>${t.asset}</strong></td><td>${brokerTag(t.broker)}</td><td><span class="badge ${t.type==='buy'?'badge-green':'badge-red'}">${t.type}</span></td><td class="mono" style="color:var(--amber);">${gbp(t.feesGBP)}</td><td class="mono" style="color:var(--text3);">${t.fees?`${t.currency} ${t.fees.toFixed(4)}`:'—'}</td></tr>`).join('');
   ft.innerHTML=`<div style="display:flex;justify-content:flex-end;padding:8px 14px 0;"><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div><table><thead><tr><th>Date</th><th>Asset</th><th>Broker</th><th>Type</th><th>Fee (GBP)</th><th>Fee (orig)</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
@@ -2722,7 +2738,7 @@ async function saveTrade() {
     notes:$('t-notes').value,matchedTo:null,pnlGBP:null,pairId:null
   };
   data.trades.push(trade);
-  data.trades.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  data.trades.sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
   if(trade.type==='sell'){data.pendingMatches.push(trade.id);}
   await save();renderAll();closeModal('modal-trade');
   toast(`Added: ${trade.type.toUpperCase()} ${qty(qty_)} ${asset}`,'success');
