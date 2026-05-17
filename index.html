@@ -1020,12 +1020,6 @@ async function save() {
     }
     await Promise.all(chunkPromises);
 
-    // First clear the old trades field from main document if it exists
-    // This prevents the document from exceeding 1MB
-    await db.collection('foliotrack').doc('portfolio_' + currentPortfolioId).set({
-      trades: firebase.firestore.FieldValue.delete(),
-    }, { merge: true }).catch(()=>{}); // ignore if field doesn't exist
-
     // Save main document (metadata only, no trades)
     await db.collection('foliotrack').doc('portfolio_' + currentPortfolioId).set({
       tradeChunks: totalChunks,
@@ -2867,28 +2861,47 @@ function getPairName(pairId) {
 
 // BACKUPS
 async function snapshot(label) {
-  data.snapshots.push({id:genId(),date:today(),label,count:data.trades.length,data:JSON.stringify({trades:data.trades,dividends:data.dividends,imports:data.imports})});
-  if(data.snapshots.length>20)data.snapshots=data.snapshots.slice(-20);
+  const snapId = genId();
+  const snapData = {id:snapId,date:today(),label,count:data.trades.length};
+  data.snapshots.push(snapData);
+  if(data.snapshots.length>20) data.snapshots=data.snapshots.slice(-20);
+  // Store full snapshot data in separate document to avoid bloating main doc
+  try {
+    await db.collection('foliotrack').doc(`snapshot_${snapId}`).set({
+      id:snapId,date:today(),label,
+      trades:data.trades,dividends:data.dividends,imports:data.imports
+    });
+  } catch(e) { console.warn('Snapshot save failed:', e.message); }
 }
 
 async function restoreSnap(id) {
   const s=data.snapshots.find(x=>x.id===id);
   if(!s||!confirm(`Restore to "${s.label}"?`))return;
-  const parsed=JSON.parse(s.data);
-  data.trades=parsed.trades||[];data.dividends=parsed.dividends||[];data.imports=parsed.imports||[];
-  data.pendingMatches=[];checkMatches();
-  await save();renderAll();toast('Snapshot restored ✓','success');
+  try {
+    const doc = await db.collection('foliotrack').doc(`snapshot_${id}`).get();
+    if(!doc.exists){toast('Snapshot data not found','error');return;}
+    const parsed = doc.data();
+    data.trades=parsed.trades||[];data.dividends=parsed.dividends||[];data.imports=parsed.imports||[];
+    data.pendingMatches=[];checkMatches();
+    await save();renderAll();toast('Snapshot restored ✓','success');
+  } catch(e) { toast('Restore failed: '+e.message,'error'); }
 }
 
-function dlSnap(id) {
+async function dlSnap(id) {
   const s=data.snapshots.find(x=>x.id===id);
-  if(s)dlJSON(JSON.parse(s.data),`foliotrack-snapshot-${s.date}.json`);
+  if(!s) return;
+  try {
+    const doc = await db.collection('foliotrack').doc(`snapshot_${id}`).get();
+    if(doc.exists) dlJSON(doc.data(), `foliotrack-snapshot-${s.date}.json`);
+  } catch(e) {}
 }
 
 async function deleteSnap(id) {
   if(!confirm('Delete this snapshot? This cannot be undone.')) return;
   data.snapshots=data.snapshots.filter(s=>s.id!==id);
   await save();
+  // Also delete the separate snapshot document
+  db.collection('foliotrack').doc(`snapshot_${id}`).delete().catch(()=>{});
   renderSnapshots();
   toast('Snapshot deleted','info');
 }
