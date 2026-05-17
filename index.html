@@ -991,8 +991,14 @@ async function save() {
     }
     await Promise.all(chunkPromises);
 
+    // First clear the old trades field from main document if it exists
+    // This prevents the document from exceeding 1MB
+    await db.collection('foliotrack').doc('portfolio_' + currentPortfolioId).set({
+      trades: firebase.firestore.FieldValue.delete(),
+    }, { merge: true }).catch(()=>{}); // ignore if field doesn't exist
+
     // Save main document (metadata only, no trades)
-    const mainDoc = {
+    await db.collection('foliotrack').doc('portfolio_' + currentPortfolioId).set({
       tradeChunks: totalChunks,
       dividends: data.dividends,
       imports: data.imports,
@@ -1001,10 +1007,7 @@ async function save() {
       fxRates: data.fxRates,
       pendingMatches: data.pendingMatches,
       updatedAt: new Date().toISOString()
-    };
-    console.log('[save] saving main doc with imports:', mainDoc.imports.length, 'trades chunks:', totalChunks);
-    await db.collection('foliotrack').doc('portfolio_' + currentPortfolioId).set(mainDoc);
-    console.log('[save] main doc saved ok');
+    });
     await db.collection('foliotrack').doc('portfolios').set({ list: portfolios });
     sync('ok','Saved');
     setTimeout(()=>sync('ok','Connected'),2000);
