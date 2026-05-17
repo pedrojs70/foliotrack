@@ -945,7 +945,6 @@ async function load() {
 
 async function loadPortfolio(id) {
   const CHUNK_SIZE = 300;
-  // Load main document (metadata + first chunk of trades)
   const doc = await db.collection('foliotrack').doc('portfolio_' + id).get();
   if(doc.exists) {
     const d = doc.data();
@@ -955,12 +954,40 @@ async function loadPortfolio(id) {
     data.pairs = d.pairs || [];
     data.fxRates = d.fxRates || {};
     data.pendingMatches = d.pendingMatches || [];
+
     const totalChunks = d.tradeChunks || 0;
-    // Load trade chunks
-    if(totalChunks === 0) {
-      // Legacy: trades stored in main doc
-      data.trades = d.trades || [];
-    } else {
+
+    if(totalChunks === 0 && d.trades && d.trades.length > 0) {
+      // MIGRATION: old format — trades stored in main doc, move to chunks
+      console.log('[migration] moving', d.trades.length, 'trades to chunks...');
+      data.trades = d.trades;
+      const newChunks = Math.ceil(d.trades.length / CHUNK_SIZE);
+
+      // Save chunks
+      const chunkPromises = [];
+      for(let i = 0; i < newChunks; i++) {
+        const chunk = d.trades.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        chunkPromises.push(
+          db.collection('foliotrack').doc(`portfolio_${id}_trades_${i}`).set({ trades: chunk })
+        );
+      }
+      await Promise.all(chunkPromises);
+
+      // Update main doc — remove trades field, add tradeChunks
+      await db.collection('foliotrack').doc('portfolio_' + id).set({
+        tradeChunks: newChunks,
+        dividends: data.dividends,
+        imports: data.imports,
+        snapshots: data.snapshots,
+        pairs: data.pairs,
+        fxRates: data.fxRates,
+        pendingMatches: data.pendingMatches,
+        updatedAt: new Date().toISOString()
+      });
+      console.log('[migration] done. chunks:', newChunks);
+
+    } else if(totalChunks > 0) {
+      // New chunked format
       data.trades = [];
       const chunkPromises = [];
       for(let i = 0; i < totalChunks; i++) {
@@ -968,6 +995,8 @@ async function loadPortfolio(id) {
       }
       const chunks = await Promise.all(chunkPromises);
       chunks.forEach(c => { if(c.exists) data.trades.push(...(c.data().trades || [])); });
+    } else {
+      data.trades = [];
     }
   } else {
     data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[] };
