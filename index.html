@@ -439,6 +439,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
       <div class="topbar-title" id="page-title">Dashboard</div>
       <div class="topbar-right">
         <div class="date-filter">
+          <div class="date-chip" onclick="setFilter(this,'fy2627')">UK FY 26/27</div>
           <div class="date-chip" onclick="setFilter(this,'fy2526')">UK FY 25/26</div>
           <div class="date-chip" onclick="setFilter(this,'fy2425')">UK FY 24/25</div>
           <div class="date-chip" onclick="setFilter(this,'fy2324')">UK FY 23/24</div>
@@ -518,7 +519,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
       <div class="content">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <div class="tabs" style="margin-bottom:0;"><div class="tab active" onclick="filterTrades('all',this)">All</div><div class="tab" onclick="filterTrades('buy',this)">Buys</div><div class="tab" onclick="filterTrades('sell',this)">Sells</div></div>
+          <div class="tabs" style="margin-bottom:0;"><div class="tab active" onclick="filterTrades('all',this)">All</div><div class="tab" onclick="filterTrades('buy',this)">Buys</div><div class="tab" onclick="filterTrades('sell',this)">Sells</div><div class="tab" onclick="filterTrades('stocks',this)">Stocks &amp; ETFs</div><div class="tab" onclick="filterTrades('crypto',this)">Crypto</div></div>
           <select id="trades-broker-filter" onchange="renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;">
             <option value="">All Brokers</option>
             <option value="IBKR">IBKR</option>
@@ -2331,6 +2332,8 @@ function renderTrades() {
   let trades=[...data.trades].sort((a,b)=>new Date(b.date)-new Date(a.date));
   if(tradeFilterMode==='buy')trades=trades.filter(t=>t.type==='buy');
   else if(tradeFilterMode==='sell')trades=trades.filter(t=>t.type==='sell');
+  else if(tradeFilterMode==='stocks')trades=trades.filter(t=>t.class==='Stock/ETF');
+  else if(tradeFilterMode==='crypto')trades=trades.filter(t=>t.class==='Crypto');
   // Broker filter
   const brokerFilter=$('trades-broker-filter')?.value||'';
   if(brokerFilter) trades=trades.filter(t=>normBroker(t.broker)===brokerFilter);
@@ -2411,6 +2414,7 @@ function renderPnL() {
   // Dynamic period label — use currentPeriod for reliable FY detection
   let badgeLabel, periodLabel;
   if(currentPeriod==='all'){ badgeLabel='All time'; periodLabel='All time'; }
+  else if(currentPeriod==='fy2627'){ badgeLabel='UK FY 26/27'; periodLabel='UK FY 26/27 (1 Apr 2026 – 31 Mar 2027)'; }
   else if(currentPeriod==='fy2526'||currentPeriod==='fy'){ badgeLabel='UK FY 25/26'; periodLabel='UK FY 25/26 (1 Apr 2025 – 31 Mar 2026)'; }
   else if(currentPeriod==='fy2425'){ badgeLabel='UK FY 24/25'; periodLabel='UK FY 24/25 (1 Apr 2024 – 31 Mar 2025)'; }
   else if(currentPeriod==='fy2324'){ badgeLabel='UK FY 23/24'; periodLabel='UK FY 23/24 (1 Apr 2023 – 31 Mar 2024)'; }
@@ -2625,8 +2629,15 @@ function renderTax() {
   $('tax-net').className=`metric-value ${net>=0?'pos':'neg'}`;
   $('tax-div').textContent=gbp(divIncome);
 
-  // Update title
-  const fyLabel=`${fyStart.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})} – ${fyEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
+  // Update title with correct FY dates
+  const fyLabels = {
+    'fy2627':'UK FY 26/27 (1 Apr 2026 – 31 Mar 2027)',
+    'fy2526':'UK FY 25/26 (1 Apr 2025 – 31 Mar 2026)',
+    'fy2425':'UK FY 24/25 (1 Apr 2024 – 31 Mar 2025)',
+    'fy2324':'UK FY 23/24 (1 Apr 2023 – 31 Mar 2024)',
+  };
+  const fyLabel = fyLabels[currentPeriod] ||
+    `${fyStart.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})} – ${fyEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
   const titleEl=$('tax-disposals-title');
   if(titleEl) titleEl.textContent=`CGT Disposals — ${fyLabel}`;
 
@@ -2968,16 +2979,17 @@ function setFilter(el,period) {
     const y=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;
     from=new Date(y,3,1); to=new Date(y+1,2,31);
   }
+  else if(period==='fy2627'){from=new Date(2026,3,1);to=new Date(2027,2,31);}
   else if(period==='fy2526'){from=new Date(2025,3,1);to=new Date(2026,2,31);}
   else if(period==='fy2425'){from=new Date(2024,3,1);to=new Date(2025,2,31);}
   else if(period==='fy2324'){from=new Date(2023,3,1);to=new Date(2024,2,31);}
   else if(period==='1y')from.setFullYear(from.getFullYear()-1);
   else if(period==='all'){from=new Date(2018,0,1);to=new Date(2099,0,1);}
   $('date-from').value=fmt(from);$('date-to').value=fmt(to);
-  // Update period badge
   const badge=$('pnl-period-badge');
   if(badge){
     if(period==='all') badge.textContent='All time';
+    else if(period==='fy2627') badge.textContent='UK FY 26/27';
     else if(period==='fy2526'||period==='fy') badge.textContent='UK FY 25/26';
     else if(period==='fy2425') badge.textContent='UK FY 24/25';
     else if(period==='fy2324') badge.textContent='UK FY 23/24';
