@@ -1199,8 +1199,10 @@ function parseBroker(text, hint) {
   const broker = hint || detectBroker(headers);
   if (!broker) return { trades:[], dividends:[], broker:null, error:'unrecognised', headers };
   const trades=[], dividends=[];
-  for (let i=1;i<rows.length;i++) {
-    const row=rows[i];
+  // Reverse rows for Bitget CSV (newest-first in export → oldest-first for processing)
+  const dataRows = broker==='Bitget' ? rows.slice(1).reverse() : rows.slice(1);
+  for (let i=0;i<dataRows.length;i++) {
+    const row=dataRows[i];
     if (row.length<3||!row[0]) continue;
     const obj={};
     headers.forEach((h,idx)=>obj[(h||'').trim()||idx]=row[idx]||'');
@@ -1678,10 +1680,13 @@ function mapTrade(obj, broker) {
       // Use executed qty and average price
       qty=Math.abs(parseFloat(obj['Executed']||obj['Trading volume']||obj['Amount']||obj['Qty']||0));
       price=parseFloat(obj['Average Price']||obj['Price']||obj['Filled Price']||0);
-      date=parseDateMDY(obj['Date']||obj['Time']||'');
+      const rawDateBitget=obj['Date']||obj['Time']||'';
+      date=parseDateMDY(rawDateBitget);
       currency='USDT';cls='Crypto';
       fees=Math.abs(parseFloat(obj['Fee']||0));
       if(!qty||!price) return null;
+      // Build full trade with datetime
+      return {id:genId(),type,asset:asset.toUpperCase(),description:pair,broker:'Bitget',date,datetime:parseDateMDYFull(rawDateBitget),qty,price,currency,priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees,feesGBP:0,class:cls,subclass:'Spot',notes:'',tags:['spot'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null};
     } else if(broker==='BingX'){
       const type_=(obj['Type']||obj['Direction']||obj['Side']||'').trim().toLowerCase();
       if(type_!=='buy'&&type_!=='sell') return null;
