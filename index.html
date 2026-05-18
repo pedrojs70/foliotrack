@@ -1521,12 +1521,16 @@ function parseDateMDYFull(str) {
   // ISO format: 2026-01-05 13:47:01 or 2026-01-05T13:47:01
   const isoM = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
   if(isoM) return `${isoM[1]}T${isoM[2]}`;
-  // US format: 5/23/25 21:05 or 1/5/26 13:47
+  // ISO format with single-digit hour: 2026-03-24 7:20:00
+  const isoM2 = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{1}:\d{2})/);
+  if(isoM2) return `${isoM2[1]}T0${isoM2[2]}`;
+  // US format: 5/23/25 21:05
   const usM = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*(\d{1,2}:\d{2})?/);
   if(usM) {
     const y = usM[3].length===2 ? '20'+usM[3] : usM[3];
     const dateOnly = `${y}-${usM[1].padStart(2,'0')}-${usM[2].padStart(2,'0')}`;
-    const time = usM[4] || '00:00';
+    const timeParts = usM[4] ? usM[4].split(':') : ['00','00'];
+    const time = `${timeParts[0].padStart(2,'0')}:${timeParts[1]}`;
     return `${dateOnly}T${time}`;
   }
   return today()+'T00:00';
@@ -1938,19 +1942,8 @@ function autoMatchAll() {
 
   const today_=new Date().toISOString().split('T')[0];
   function sortTrades(arr){
-    return arr.sort((a,b)=>{
-      if(a.date<b.date) return -1;
-      if(a.date>b.date) return 1;
-      const aHasTime=a.datetime&&!a.datetime.startsWith(today_)&&!a.datetime.endsWith('T00:00');
-      const bHasTime=b.datetime&&!b.datetime.startsWith(today_)&&!b.datetime.endsWith('T00:00');
-      if(aHasTime&&bHasTime){
-        if(a.datetime<b.datetime) return -1;
-        if(a.datetime>b.datetime) return 1;
-      }
-      if(a.id<b.id) return -1;
-      if(a.id>b.id) return 1;
-      return 0;
-    });
+    function normDT(t){ const dt=t.datetime||t.date+'T00:00'; return dt.replace(/T(\d):/, 'T0$1:'); }
+    return arr.sort((a,b)=>normDT(a)>normDT(b)?1:normDT(a)<normDT(b)?-1:0);
   }
 
   Object.values(groups).forEach(trades=>{
@@ -1978,7 +1971,7 @@ function autoMatchAll() {
             lot.remaining=Math.max(0,avail-used);
             rem-=used;
             if(!firstId) firstId=lot.trade.id;
-            if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id;
+            if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id; // only set once
             if(lot.remaining<=0.000001) shortStack.shift();
           }
           t.pnlGBP=+(proceeds-(t.qty*(t.priceGBP||t.price||0))).toFixed(2);
@@ -2007,7 +2000,7 @@ function autoMatchAll() {
               const used=Math.min(r,l.remaining);
               l.remaining=Math.max(0,l.remaining-used);
               r-=used;
-              if(!l.trade.matchedTo) l.trade.matchedTo=t.id;
+              if(!l.trade.matchedTo) l.trade.matchedTo=t.id; // only set once
             }
             while(longStack.length&&longStack[0].remaining<=0.000001) longStack.shift();
           } else {
@@ -2020,7 +2013,7 @@ function autoMatchAll() {
               lot.remaining=Math.max(0,avail-used);
               rem-=used;
               if(!firstId) firstId=lot.trade.id;
-              if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id;
+              if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id; // only set once
               if(lot.remaining<=0.000001) longStack.shift();
             }
           }
@@ -2457,7 +2450,8 @@ function renderPositions() {
 }
 
 function renderTrades() {
-  let trades=[...data.trades].sort((a,b)=>new Date(b.datetime||b.date)-new Date(a.datetime||a.date));
+  function normDT(t){ const dt=t.datetime||t.date+'T00:00'; return dt.replace(/T(\d):/, 'T0$1:'); }
+  let trades=[...data.trades].sort((a,b)=>normDT(b)>normDT(a)?1:normDT(b)<normDT(a)?-1:0);
   if(tradeFilterMode==='buy')trades=trades.filter(t=>t.type==='buy');
   else if(tradeFilterMode==='sell')trades=trades.filter(t=>t.type==='sell');
   else if(tradeFilterMode==='stocks')trades=trades.filter(t=>t.class==='Stock/ETF');
