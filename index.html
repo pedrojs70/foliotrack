@@ -2017,35 +2017,46 @@ function autoMatchAll() {
   }
 
   // Match Short closes (buy closes a short sell)
+  // Symmetrical to Long FIFO — track remaining qty of each Sell lot
+  const sellRemaining={};
+  data.trades.filter(t=>t.type==='sell').forEach(t=>{
+    if(sellRemaining[t.id]===undefined) sellRemaining[t.id]=t.qty;
+  });
+
   const shortBuys=toMatch.filter(t=>t.type==='buy'&&t.side==='Short');
   for(const closeBuy of shortBuys){
     const asset=(closeBuy.asset||'').trim();
+    // Find unmatched Sells for this asset (Short openings) — FIFO order
     const openSells=[...data.trades].filter(t=>
       t.type==='sell'&&
       (t.asset||'').trim()===asset&&
       t.broker===closeBuy.broker&&
-      t.date<=closeBuy.date
+      t.date<=closeBuy.date&&
+      (sellRemaining[t.id]===undefined||sellRemaining[t.id]>0)
     ).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
     if(!openSells.length) continue;
 
-    // Total value received when opening the short (proceeds)
-    const totalSellValueGBP=openSells.reduce((s,t)=>s+(t.valueGBP||0),0);
-    const totalSellQty=openSells.reduce((s,t)=>s+t.qty,0);
-    const avgSellValueGBP=totalSellQty>0?totalSellValueGBP/totalSellQty:0;
+    // FIFO: consume sell lots to match the buy
+    let rem=closeBuy.qty, proceeds=0;
+    let firstSellId=null;
+    for(const lot of openSells){
+      if(rem<=0) break;
+      const avail=sellRemaining[lot.id]!==undefined?sellRemaining[lot.id]:lot.qty;
+      if(avail<=0) continue;
+      const threshold=avail*0.05;
+      const used=(rem<=avail+threshold)?avail:Math.min(rem,avail);
+      proceeds+=used*(lot.priceGBP||lot.price||0);
+      sellRemaining[lot.id]=Math.max(0,avail-used);
+      rem-=used;
+      if(!firstSellId) firstSellId=lot.id;
+      if(!lot.matchedTo) lot.matchedTo=closeBuy.id;
+    }
 
-    // Cost to close the short (what we pay to buy back)
-    const buyValueGBP=closeBuy.valueGBP||0;
     const buyPriceGBP=closeBuy.priceGBP||closeBuy.price||0;
-
-    // Short P&L = proceeds from opening - cost of closing
-    // Profit when buy price < sell price (bought back cheaper)
-    const closedQty=Math.min(closeBuy.qty, totalSellQty);
-    const openingProceeds=+(closedQty*avgSellValueGBP).toFixed(2);
     const closingCost=+(closeBuy.qty*buyPriceGBP).toFixed(2);
     closeBuy.costBasisGBP=closingCost;
-    closeBuy.pnlGBP=+(openingProceeds-closingCost).toFixed(2);
-    closeBuy.matchedTo=openSells[0].id;
-    openSells.forEach(s=>{ if(!s.matchedTo) s.matchedTo=closeBuy.id; });
+    closeBuy.pnlGBP=+(proceeds-closingCost).toFixed(2);
+    closeBuy.matchedTo=firstSellId||openSells[0].id;
   }
 
   // Pending = Long sells with no match found in DB (genuinely missing history)
