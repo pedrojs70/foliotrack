@@ -1518,32 +1518,38 @@ function parseDateISO(str) {
   return today();
 }
 
+function parseDateMDYFull(str) {
+  if(!str) return today()+'T00:00';
+  const s = str.toString().trim();
+  // ISO format: 2026-01-05 13:47:01 or 2026-01-05T13:47:01
+  const isoM = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+  if(isoM) return `${isoM[1]}T${isoM[2]}`;
+  // US format: 5/23/25 21:05 or 1/5/26 13:47
+  const usM = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*(\d{1,2}:\d{2})?/);
+  if(usM) {
+    const y = usM[3].length===2 ? '20'+usM[3] : usM[3];
+    const dateOnly = `${y}-${usM[1].padStart(2,'0')}-${usM[2].padStart(2,'0')}`;
+    const time = usM[4] || '00:00';
+    return `${dateOnly}T${time}`;
+  }
+  return today()+'T00:00';
+}
+
 function parseDateMDY(str) {
   if(!str) return today();
-  // Format: 5/4/26 17:12 or 5/4/2026 17:12
-  const m = str.toString().match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*(\d{1,2}:\d{2})?/);
-  if(m) {
-    const y = m[3].length===2 ? '20'+m[3] : m[3];
-    const dateOnly = `${y}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
-    return dateOnly;
+  const s = str.toString().trim();
+  // ISO format: 2026-01-05 13:47:01
+  const isoM = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if(isoM) return isoM[1];
+  // US format: 5/23/25
+  const usM = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(usM) {
+    const y = usM[3].length===2 ? '20'+usM[3] : usM[3];
+    return `${y}-${usM[1].padStart(2,'0')}-${usM[2].padStart(2,'0')}`;
   }
   const d = new Date(str);
   if(!isNaN(d)) return d.toISOString().split('T')[0];
   return today();
-}
-
-function parseDateMDYFull(str) {
-  // Returns full datetime string for sorting: "2026-05-01T13:47"
-  if(!window._dateFullLog) { window._dateFullLog=true; console.log('[parseDateMDYFull] called with:', JSON.stringify(str), 'type:', typeof str); }
-  if(!str) return today()+'T00:00';
-  const m = str.toString().match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*(\d{1,2}:\d{2})?/);
-  if(m) {
-    const y = m[3].length===2 ? '20'+m[3] : m[3];
-    const dateOnly = `${y}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
-    const time = m[4] || '00:00';
-    return `${dateOnly}T${time}`;
-  }
-  return today()+'T00:00';
 }
 
 function parseIBKR(rows) {
@@ -1967,7 +1973,7 @@ function autoMatchAll() {
         t.type==='buy'&&t.side==='Long'&&
         (t.asset||'').trim()===asset&&
         t.broker===broker&&
-        new Date(t.datetime||t.date+'T00:00')<=new Date(sell.datetime||sell.date+'T00:00')
+        t.date<=sell.date
       );
       if(!buys.length) continue;
       const totalQty=buys.reduce((s,b)=>s+b.qty,0);
@@ -1982,12 +1988,11 @@ function autoMatchAll() {
         t.type==='buy'&&t.side==='Long'&&
         (t.asset||'').trim()===asset&&
         t.broker===broker&&
-        new Date(t.datetime||t.date+'T00:00')<=new Date(sell.datetime||sell.date+'T00:00')&&
+        t.date<=sell.date&&
         (buyRemaining[t.id]===undefined||buyRemaining[t.id]>0)
       ).sort((a,b)=>{
-        const da=a.datetime?new Date(a.datetime):new Date(a.date+'T00:00');
-        const db2=b.datetime?new Date(b.datetime):new Date(b.date+'T00:00');
-        if(da-db2!==0) return da-db2;
+        if(a.date<b.date) return -1;
+        if(a.date>b.date) return 1;
         if(a.id<b.id) return -1;
         if(a.id>b.id) return 1;
         return 0;
