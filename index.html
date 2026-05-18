@@ -1205,7 +1205,11 @@ function parseBroker(text, hint) {
     const row=dataRows[i];
     if (row.length<3||!row[0]) continue;
     const obj={};
-    headers.forEach((h,idx)=>obj[(h||'').trim()||idx]=row[idx]||'');
+    headers.forEach((h,idx)=>{
+      obj[idx]=row[idx]||''; // always set numeric index
+      const key=(h||'').trim();
+      if(key) obj[key]=row[idx]||''; // also set by name (last wins for duplicates)
+    });
     const t = mapTrade(obj, broker);
     if (t) {
       if(t._isDividend){ dividends.push(t); }
@@ -1682,9 +1686,13 @@ function mapTrade(obj, broker) {
       // Use executed qty and average price
       qty=Math.abs(parseFloat(obj['Executed']||obj['Trading volume']||obj['Amount']||obj['Qty']||0));
       price=parseFloat(obj['Average Price']||obj['Price']||obj['Filled Price']||0);
-      const rawDateBitget=obj['Date']||obj['Time']||'';
+      // Date is always the first column — get by index 0 since header 'Date' may be repeated
+      const rawDateBitget=obj[0]||obj['Date']||obj['Time']||'';
       date=parseDateMDY(rawDateBitget);
-      currency='USDT';cls='Crypto';
+      // Accept USDT and USDC as quote currency
+      const quoteCurrency=(obj['Quote Asset']||obj['Quote']||'USDT').toUpperCase();
+      currency=(['USDT','USDC','BUSD'].includes(quoteCurrency))?'USDT':quoteCurrency;
+      cls='Crypto';
       fees=Math.abs(parseFloat(obj['Fee']||0));
       if(!qty||!price) return null;
       // Build full trade with datetime
@@ -1879,15 +1887,24 @@ function autoMatchAll() {
     .map((t,i)=>({t,i}));
 
   withIndex.sort((a,b)=>{
-    const da = a.t.datetime ? new Date(a.t.datetime) : new Date(a.t.date+'T00:00');
-    const db2 = b.t.datetime ? new Date(b.t.datetime) : new Date(b.t.date+'T00:00');
-    if(isNaN(da)||isNaN(db2)) return 0;
-    const diff = da - db2;
-    if(diff !== 0) return diff;
-    // Same date/datetime — use ID as tiebreaker (genId is timestamp-based, older = smaller)
+    // Sort by date first
+    if(a.t.date < b.t.date) return -1;
+    if(a.t.date > b.t.date) return 1;
+    // Same date: use datetime if available and meaningful (not today's date)
+    const today = new Date().toISOString().split('T')[0];
+    const aHasTime = a.t.datetime && !a.t.datetime.startsWith(today) && !a.t.datetime.endsWith('T00:00');
+    const bHasTime = b.t.datetime && !b.t.datetime.startsWith(today) && !b.t.datetime.endsWith('T00:00');
+    if(aHasTime && bHasTime) {
+      if(a.t.datetime < b.t.datetime) return -1;
+      if(a.t.datetime > b.t.datetime) return 1;
+    }
+    // Same date without reliable time: Buy before Sell
+    if(a.t.type==='buy' && b.t.type==='sell') return -1;
+    if(a.t.type==='sell' && b.t.type==='buy') return 1;
+    // Final tiebreaker: ID
     if(a.t.id < b.t.id) return -1;
     if(a.t.id > b.t.id) return 1;
-    return a.i - b.i;
+    return 0;
   });
 
   const sorted = withIndex.map(x=>x.t);
@@ -1912,14 +1929,20 @@ function autoMatchAll() {
     .map((t,i)=>({t,i}));
 
   toMatchWithIdx.sort((a,b)=>{
-    const da = a.t.datetime ? new Date(a.t.datetime) : new Date(a.t.date+'T00:00');
-    const db2 = b.t.datetime ? new Date(b.t.datetime) : new Date(b.t.date+'T00:00');
-    if(isNaN(da)||isNaN(db2)) return 0;
-    const diff = da - db2;
-    if(diff !== 0) return diff;
+    if(a.t.date < b.t.date) return -1;
+    if(a.t.date > b.t.date) return 1;
+    const today = new Date().toISOString().split('T')[0];
+    const aHasTime = a.t.datetime && !a.t.datetime.startsWith(today) && !a.t.datetime.endsWith('T00:00');
+    const bHasTime = b.t.datetime && !b.t.datetime.startsWith(today) && !b.t.datetime.endsWith('T00:00');
+    if(aHasTime && bHasTime) {
+      if(a.t.datetime < b.t.datetime) return -1;
+      if(a.t.datetime > b.t.datetime) return 1;
+    }
+    if(a.t.type==='buy' && b.t.type==='sell') return -1;
+    if(a.t.type==='sell' && b.t.type==='buy') return 1;
     if(a.t.id < b.t.id) return -1;
     if(a.t.id > b.t.id) return 1;
-    return a.i - b.i;
+    return 0;
   });
 
   const toMatch = toMatchWithIdx.map(x=>x.t);
