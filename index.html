@@ -1673,6 +1673,8 @@ function mapTrade(obj, broker) {
       if(status&&!status.includes('fully executed')) return null;
       const dir=(obj['Direction']||obj['Side']||obj['side']||'').trim().toLowerCase();
       if(dir!=='buy'&&dir!=='sell') return null;
+      // DEBUG
+      if(!window._bitgetCsvDateLogged) { window._bitgetCsvDateLogged=true; console.log('[Bitget CSV debug] all keys:', JSON.stringify(Object.keys(obj))); console.log('[Bitget CSV debug] Date field:', JSON.stringify(obj['Date'])); }
       type=dir;
       const pair=obj['Trading pair']||obj['Pair']||obj['Symbol']||'';
       const base=(obj['Base Asset']||pair.split('/')[0]||pair).trim();
