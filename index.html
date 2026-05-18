@@ -1469,6 +1469,8 @@ function mapBitgetSpot(obj) {
   if(dir!=='buy'&&dir!=='sell') return null;
   const pair=(obj['Trading pair']||obj['Pair']||'').trim();
   const base=(obj['Base Asset']||pair.split('/')[0]||pair).trim();
+  // DEBUG: log raw date field
+  if(!window._bitgetDateLogged) { console.log('[Bitget date debug] keys:', Object.keys(obj).join(', ')); console.log('[Bitget date debug] Date value:', obj['Date'], 'type:', typeof obj['Date']); window._bitgetDateLogged=true; }
   // Use Average Price and Trading volume (actual executed values)
   const qty=Math.abs(parseFloat(obj['Executed']||obj['Trading volume']||obj['Order amount'])||0);
   const price=parseFloat(obj['Average Price']||obj['Price']||0);
