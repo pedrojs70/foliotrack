@@ -1952,9 +1952,9 @@ function autoMatchAll() {
 
   // Match Long sells — FIFO with quantity tracking
   const longSells=toMatch.filter(t=>t.type==='sell'&&t.side==='Long');
-  // Track remaining qty for each buy lot
+  // Track remaining qty for each buy lot — include all buys
   const buyRemaining={};
-  data.trades.filter(t=>t.type==='buy'&&t.side==='Long').forEach(t=>{
+  data.trades.filter(t=>t.type==='buy').forEach(t=>{
     if(buyRemaining[t.id]===undefined) buyRemaining[t.id]=t.qty;
   });
 
@@ -1981,7 +1981,7 @@ function autoMatchAll() {
     } else {
       // FIFO — oldest buy first, track remaining qty
       const buys=data.trades.filter(t=>
-        t.type==='buy'&&t.side==='Long'&&
+        t.type==='buy'&&
         (t.asset||'').trim()===asset&&
         t.broker===broker&&
         t.date<=sell.date&&
@@ -2021,11 +2021,11 @@ function autoMatchAll() {
   for(const closeBuy of shortBuys){
     const asset=(closeBuy.asset||'').trim();
     const openSells=[...data.trades].filter(t=>
-      t.type==='sell'&&t.side==='Short'&&
+      t.type==='sell'&&
       (t.asset||'').trim()===asset&&
       t.broker===closeBuy.broker&&
-      new Date(t.date)<=new Date(closeBuy.date)
-    ).sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
+      t.date<=closeBuy.date
+    ).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
     if(!openSells.length) continue;
 
     // Total value received when opening the short (proceeds)
