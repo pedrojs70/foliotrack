@@ -1451,6 +1451,17 @@ function mapBingXFutures(obj) {
   return t;
 }
 
+  function parseBitgetDate(raw) {
+    if(!raw) return '';
+    if(raw instanceof Date) {
+      return `${raw.getMonth()+1}/${raw.getDate()}/${String(raw.getFullYear()).slice(2)} ${raw.getHours()}:${String(raw.getMinutes()).padStart(2,'0')}`;
+    }
+    if(typeof raw === 'number') {
+      const d = new Date(Math.round((raw - 25569) * 86400 * 1000));
+      return `${d.getMonth()+1}/${d.getDate()}/${String(d.getFullYear()).slice(2)} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+    return String(raw);
+  }
 function mapBitgetSpot(obj) {
   const status=(obj['Status']||'').toLowerCase();
   if(!status.includes('fully executed')) return null;
@@ -1461,7 +1472,7 @@ function mapBitgetSpot(obj) {
   // Use Average Price and Trading volume (actual executed values)
   const qty=Math.abs(parseFloat(obj['Executed']||obj['Trading volume']||obj['Order amount'])||0);
   const price=parseFloat(obj['Average Price']||obj['Price']||0);
-  const dateStr=obj['Date']||'';
+  const dateStr=parseBitgetDate(obj['Date']||obj['Time']||'');
   const date=parseDateMDY(dateStr);
   const datetime=parseDateMDYFull(dateStr);
   if(!base||!qty||!price) return null;
@@ -1479,7 +1490,7 @@ function mapBitgetFutures(obj) {
   // Use Trading volume (executed qty) and Average Price
   const qty=Math.abs(parseFloat(obj['Trading volume']||obj['Executed']||0));
   const price=parseFloat(obj['Average Price']||0);
-  const dateStr=obj['Date']||'';
+  const dateStr=parseBitgetDate(obj['Date']||obj['Time']||'');
   const date=parseDateMDY(dateStr);
   const datetime=parseDateMDYFull(dateStr);
   const pnlRaw=parseFloat(obj['Realized P/L']||obj['NetProfits']||0);
@@ -1864,7 +1875,10 @@ function autoMatchAll() {
     if(isNaN(da)||isNaN(db2)) return 0;
     const diff = da - db2;
     if(diff !== 0) return diff;
-    return a.i - b.i; // stable: preserve original order for same timestamp
+    // Same date/datetime — use ID as tiebreaker (genId is timestamp-based, older = smaller)
+    if(a.t.id < b.t.id) return -1;
+    if(a.t.id > b.t.id) return 1;
+    return a.i - b.i;
   });
 
   const sorted = withIndex.map(x=>x.t);
@@ -1894,6 +1908,8 @@ function autoMatchAll() {
     if(isNaN(da)||isNaN(db2)) return 0;
     const diff = da - db2;
     if(diff !== 0) return diff;
+    if(a.t.id < b.t.id) return -1;
+    if(a.t.id > b.t.id) return 1;
     return a.i - b.i;
   });
 
