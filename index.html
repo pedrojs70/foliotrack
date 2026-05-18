@@ -1534,6 +1534,7 @@ function parseDateMDY(str) {
 
 function parseDateMDYFull(str) {
   // Returns full datetime string for sorting: "2026-05-01T13:47"
+  if(!window._dateFullLog) { window._dateFullLog=true; console.log('[parseDateMDYFull] called with:', JSON.stringify(str), 'type:', typeof str); }
   if(!str) return today()+'T00:00';
   const m = str.toString().match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*(\d{1,2}:\d{2})?/);
   if(m) {
@@ -2505,7 +2506,7 @@ function renderTrades() {
 
   wrap.innerHTML=`<table><thead><tr><th></th><th>Date</th><th>Type</th><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty</th><th>Price (orig)</th><th>FX</th><th>Value (orig)</th><th>Value (GBP)</th><th>Fees (GBP)</th><th>P&L</th><th>Tags</th><th>SL/TP</th><th></th></tr></thead><tbody>${paginated.map(t=>{
     const isBuy=t.type==='buy';
-    const pnlCell=t.pnlGBP!=null?`<span class="${t.pnlGBP>=0?'pos':'neg'}">${gbp(t.pnlGBP)}</span>`:'<span style="color:var(--text3);">—</span>';
+    const pnlCell=t.pnlGBP!=null?`<span class="${t.pnlGBP>=0?'pos':'neg'}">${t.pnlGBP>=0?'':'-'}${gbp(t.pnlGBP)}</span>`:'<span style="color:var(--text3);">—</span>';
     const origPrice=t.price?`${t.currency==='GBP'?'£':t.currency==='USDT'||t.currency==='USD'?'$':'€'}${t.price.toFixed(4)}`:'—';
     const tags=(t.tags||[]).map(tg=>`<span class="tag-pill">${tg}</span>`).join('');
     const sltp=(t.sl||t.tp)?`<span style="font-size:11px;color:var(--text3);">${t.sl?'SL:'+t.sl:''}${t.sl&&t.tp?' ':''}${t.tp?'TP:'+t.tp:''}</span>`:'—';
