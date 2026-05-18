@@ -2028,10 +2028,11 @@ function autoMatchAll() {
           t.pnlGBP=+((t.valueGBP||0)-cost).toFixed(2);
           t.matchedTo=firstId;
         } else {
-          // Open Short
-          t.side='Short';
-          if(!t.matchedTo) t.matchedTo=null;
-          shortStack.push({trade:t, remaining:t.qty});
+          // No Long position open — this sell has no matching buy
+          // Mark as pending (orphan sell from before import period)
+          // Do NOT open a Short automatically — we can't know if it was intentional
+          t.side='Short'; // mark side for display
+          t.matchedTo=null; // will appear in pendingMatches
         }
       }
     });
