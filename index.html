@@ -1951,7 +1951,7 @@ function autoMatchAll() {
   const toMatch = toMatchWithIdx.map(x=>x.t);
 
   // Match Long sells — FIFO with quantity tracking
-  const longSells=toMatch.filter(t=>t.type==='sell'&&t.side==='Long');
+  const longSells=toMatch.filter(t=>t.type==='sell');
   // Track remaining qty for each buy lot — include all buys
   const buyRemaining={};
   data.trades.filter(t=>t.type==='buy').forEach(t=>{
@@ -2062,7 +2062,7 @@ function autoMatchAll() {
 
   // Pending = Long sells with no match found in DB (genuinely missing history)
   data.pendingMatches=data.trades
-    .filter(t=>t.type==='sell'&&t.side==='Long'&&!t.matchedTo&&t.matchedTo!=='futures')
+    .filter(t=>t.type==='sell'&&!t.matchedTo&&t.matchedTo!=='futures')
     .map(t=>t.id);
 }
 
