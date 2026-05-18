@@ -1924,18 +1924,28 @@ function autoMatchAll() {
 
   const toMatch = toMatchWithIdx.map(x=>x.t);
 
-  // Match Long sells
+  // Match Long sells — FIFO with quantity tracking
   const longSells=toMatch.filter(t=>t.type==='sell'&&t.side==='Long');
+  // Track remaining qty for each buy lot
+  const buyRemaining={};
+  data.trades.filter(t=>t.type==='buy'&&t.side==='Long').forEach(t=>{
+    if(buyRemaining[t.id]===undefined) buyRemaining[t.id]=t.qty;
+  });
+
   for(const sell of longSells){
     const asset=(sell.asset||'').trim();
-    const buys=[...data.trades].filter(t=>
-      t.type==='buy'&&t.side==='Long'&&
-      (t.asset||'').trim()===asset&&
-      new Date(t.date)<=new Date(sell.date)
-    );
-    if(!buys.length) continue;
+    const broker=sell.broker;
     const isStock=sell.class==='Stock/ETF';
+
     if(isStock){
+      // Share Pool — use all buys up to sell date
+      const buys=data.trades.filter(t=>
+        t.type==='buy'&&t.side==='Long'&&
+        (t.asset||'').trim()===asset&&
+        t.broker===broker&&
+        new Date(t.datetime||t.date+'T00:00')<=new Date(sell.datetime||sell.date+'T00:00')
+      );
+      if(!buys.length) continue;
       const totalQty=buys.reduce((s,b)=>s+b.qty,0);
       const totalCost=buys.reduce((s,b)=>s+(b.valueGBP||0),0);
       const avg=totalQty>0?totalCost/totalQty:0;
@@ -1943,16 +1953,36 @@ function autoMatchAll() {
       sell.pnlGBP=+((sell.valueGBP||0)-sell.costBasisGBP).toFixed(2);
       sell.matchedTo='pool';
     } else {
+      // FIFO — oldest buy first, track remaining qty
+      const buys=data.trades.filter(t=>
+        t.type==='buy'&&t.side==='Long'&&
+        (t.asset||'').trim()===asset&&
+        t.broker===broker&&
+        new Date(t.datetime||t.date+'T00:00')<=new Date(sell.datetime||sell.date+'T00:00')&&
+        (buyRemaining[t.id]===undefined||buyRemaining[t.id]>0)
+      ).sort((a,b)=>{
+        const da=a.datetime?new Date(a.datetime):new Date(a.date+'T00:00');
+        const db2=b.datetime?new Date(b.datetime):new Date(b.date+'T00:00');
+        if(da-db2!==0) return da-db2;
+        if(a.id<b.id) return -1;
+        if(a.id>b.id) return 1;
+        return 0;
+      });
+      if(!buys.length) continue;
       let rem=sell.qty, cost=0;
-      for(const lot of buys.sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date))){
+      let firstBuyId=null;
+      for(const lot of buys){
         if(rem<=0) break;
-        const used=Math.min(rem,lot.qty);
+        const avail=buyRemaining[lot.id]!==undefined?buyRemaining[lot.id]:lot.qty;
+        const used=Math.min(rem,avail);
         cost+=used*(lot.priceGBP||lot.price||0);
+        buyRemaining[lot.id]=(avail-used);
         rem-=used;
+        if(!firstBuyId) firstBuyId=lot.id;
       }
       sell.costBasisGBP=+cost.toFixed(2);
       sell.pnlGBP=+((sell.valueGBP||0)-sell.costBasisGBP).toFixed(2);
-      sell.matchedTo=buys[0].id;
+      sell.matchedTo=firstBuyId||buys[0].id;
     }
   }
 
