@@ -441,8 +441,6 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
         <div class="date-filter">
           <div class="date-chip" onclick="setFilter(this,'fy2627')">UK FY 26/27</div>
           <div class="date-chip" onclick="setFilter(this,'fy2526')">UK FY 25/26</div>
-          <div class="date-chip" onclick="setFilter(this,'fy2425')">UK FY 24/25</div>
-          <div class="date-chip" onclick="setFilter(this,'fy2324')">UK FY 23/24</div>
           <div class="date-chip" onclick="setFilter(this,'ytd')">YTD</div>
           <div class="date-chip" onclick="setFilter(this,'1y')">1Y</div>
           <div class="date-chip" onclick="setFilter(this,'all')">All</div>
@@ -1476,7 +1474,6 @@ function mapBitgetSpot(obj) {
   const pair=(obj['Trading pair']||obj['Pair']||'').trim();
   const base=(obj['Base Asset']||pair.split('/')[0]||pair).trim();
   // DEBUG: log raw date field
-  if(!window._bitgetDateLogged) { console.log('[Bitget date debug] keys:', Object.keys(obj).join(', ')); console.log('[Bitget date debug] Date value:', obj['Date'], 'type:', typeof obj['Date']); window._bitgetDateLogged=true; }
   // Use Average Price and Trading volume (actual executed values)
   const qty=Math.abs(parseFloat(obj['Executed']||obj['Trading volume']||obj['Order amount'])||0);
   const price=parseFloat(obj['Average Price']||obj['Price']||0);
@@ -1685,7 +1682,6 @@ function mapTrade(obj, broker) {
       const dir=(obj['Direction']||obj['Side']||obj['side']||'').trim().toLowerCase();
       if(dir!=='buy'&&dir!=='sell') return null;
       // DEBUG
-      if(!window._bitgetCsvDateLogged) { window._bitgetCsvDateLogged=true; console.log('[Bitget CSV debug] all keys:', JSON.stringify(Object.keys(obj))); console.log('[Bitget CSV debug] Date field:', JSON.stringify(obj['Date'])); }
       type=dir;
       const pair=obj['Trading pair']||obj['Pair']||obj['Symbol']||'';
       const base=(obj['Base Asset']||pair.split('/')[0]||pair).trim();
@@ -2000,12 +1996,17 @@ function autoMatchAll() {
       if(!buys.length) continue;
       let rem=sell.qty, cost=0;
       let firstBuyId=null;
+      // 95% threshold: if sell qty is within 5% of buy qty, treat as full close
+      const sellQtyAdj = sell.qty;
       for(const lot of buys){
         if(rem<=0) break;
         const avail=buyRemaining[lot.id]!==undefined?buyRemaining[lot.id]:lot.qty;
-        const used=Math.min(rem,avail);
+        if(avail<=0) continue;
+        // If remaining sell is within 5% of available buy, consume all
+        const threshold = avail * 0.05;
+        const used = (rem <= avail + threshold) ? avail : Math.min(rem, avail);
         cost+=used*(lot.priceGBP||lot.price||0);
-        buyRemaining[lot.id]=(avail-used);
+        buyRemaining[lot.id]=Math.max(0, avail-used);
         rem-=used;
         if(!firstBuyId) firstBuyId=lot.id;
       }
@@ -2792,15 +2793,58 @@ function renderPendingMatches() {
   const c=$('pending-matches-container');if(!c)return;
   const pending=data.trades.filter(t=>t.type==='sell'&&data.pendingMatches.includes(t.id));
   if(!pending.length){c.innerHTML='';return;}
-  let html=`<div class="notice notice-warn" style="display:flex;align-items:center;justify-content:space-between;"><div style="display:flex;align-items:flex-start;gap:8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0;margin-top:1px;color:var(--amber);"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg><div class="notice-text"><strong>${pending.length} sell trade${pending.length>1?'s':''}</strong> need to be matched. These are likely sells from before the import period — no matching buy found.</div></div><button class="btn btn-primary btn-sm" onclick="confirmAll()">Confirm All (Share Pool)</button></div>`;
+
+  // Group unmatched sells by asset
+  const byAsset={};
   pending.forEach(sell=>{
-    const buys=data.trades.filter(t=>t.type==='buy'&&t.asset===sell.asset&&new Date(t.date)<=new Date(sell.date));
-    const isStock=sell.class!=='Crypto';
-    const opts=isStock||!buys.length
-      ?`<option value="pool">Share Pool (HMRC — recommended)</option>`+(buys.map(b=>`<option value="${b.id}">${b.date} · ${qty(b.qty)} @ ${gbp(b.priceGBP||b.price)}</option>`).join(''))
-      :buys.map((b,i)=>`<option value="${b.id}" ${i===0?'selected':''}>${b.date} · ${qty(b.qty)} @ ${gbp(b.priceGBP||b.price)} ${i===0?'(FIFO)':''}</option>`).join('');
-    html+=`<div class="match-item"><div class="match-dot"></div><div class="match-info"><div class="match-title">Sold ${qty(sell.qty)} ${sell.asset} · ${sell.date} · ${sell.broker} · ${gbp(sell.valueGBP||0)}</div><div class="match-sub">Which buy to match?</div></div><select class="match-select" id="ms_${sell.id}">${opts}</select><button class="btn btn-primary btn-sm" onclick="confirmMatch('${sell.id}',document.getElementById('ms_${sell.id}').value)">Confirm</button></div>`;
+    if(!byAsset[sell.asset]) byAsset[sell.asset]=[];
+    byAsset[sell.asset].push(sell);
   });
+
+  let html=`<div class="card"><div class="card-head"><div><div class="card-title" style="color:var(--amber);">⚠ ${pending.length} sell trade${pending.length>1?'s':''} sem match</div><div class="card-sub">Prováveis vendas de antes do período importado. Analisa por activo e apaga as que não têm compra correspondente.</div></div></div><div class="card-body" style="padding:0;">`;
+
+  Object.entries(byAsset).sort(([a],[b])=>a.localeCompare(b)).forEach(([asset, sells])=>{
+    // Get ALL trades for this asset, sorted chronologically
+    const allTrades = data.trades
+      .filter(t=>t.asset===asset)
+      .sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.datetime<b.datetime?-1:1);
+
+    const unmatchedIds = new Set(sells.map(s=>s.id));
+
+    html+=`<div style="border-bottom:1px solid var(--border);padding:12px 16px;">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">${asset} <span style="font-size:11px;color:var(--amber);font-weight:400;">${sells.length} sem match</span></div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <thead><tr style="color:var(--text3);">
+          <th style="text-align:left;padding:3px 6px;">Data</th>
+          <th style="text-align:left;padding:3px 6px;">Tipo</th>
+          <th style="text-align:right;padding:3px 6px;">Qty</th>
+          <th style="text-align:right;padding:3px 6px;">Preço</th>
+          <th style="text-align:right;padding:3px 6px;">Valor GBP</th>
+          <th style="text-align:left;padding:3px 6px;">Match</th>
+          <th style="padding:3px 6px;"></th>
+        </tr></thead>
+        <tbody>`;
+
+    allTrades.forEach(t=>{
+      const isUnmatched = unmatchedIds.has(t.id);
+      const bg = isUnmatched ? 'background:rgba(220,38,38,0.08);' : '';
+      const matchStatus = t.matchedTo ? '✓' : isUnmatched ? '✗ sem match' : '—';
+      const matchColor = t.matchedTo ? 'color:var(--green)' : isUnmatched ? 'color:var(--red);font-weight:500' : 'color:var(--text3)';
+      html+=`<tr style="${bg}">
+        <td style="padding:4px 6px;color:var(--text2);">${t.date}</td>
+        <td style="padding:4px 6px;"><span class="badge ${t.type==='buy'?'badge-green':'badge-red'}" style="font-size:10px;">${t.type==='buy'?'Buy':'Sell'}</span></td>
+        <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${qty(t.qty)}</td>
+        <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${t.priceGBP?gbp(t.priceGBP):'—'}</td>
+        <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${t.valueGBP?gbp(t.valueGBP):'—'}</td>
+        <td style="padding:4px 6px;${matchColor}">${matchStatus}</td>
+        <td style="padding:4px 6px;"><button class="btn btn-danger btn-sm" onclick="delTrade('${t.id}')" style="padding:2px 7px;font-size:10px;">✕</button></td>
+      </tr>`;
+    });
+
+    html+=`</tbody></table></div>`;
+  });
+
+  html+=`</div></div>`;
   c.innerHTML=html;
 }
 
