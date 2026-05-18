@@ -2017,9 +2017,9 @@ function autoMatchAll() {
   }
 
   // Match Short closes (buy closes a short sell)
-  // Symmetrical to Long FIFO — track remaining qty of each Sell lot
+  // Only track Sells that were NOT matched by Long FIFO above
   const sellRemaining={};
-  data.trades.filter(t=>t.type==='sell').forEach(t=>{
+  data.trades.filter(t=>t.type==='sell'&&!t.matchedTo).forEach(t=>{
     if(sellRemaining[t.id]===undefined) sellRemaining[t.id]=t.qty;
   });
 
