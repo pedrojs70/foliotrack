@@ -1926,141 +1926,118 @@ function autoMatchAll() {
     }
   });
 
-  // Step 3: Only match trades not already confirmed
-  const toMatchWithIdx = data.trades
-    .filter(t=>t.matchedTo!=='futures'&&!t.matchedTo)
-    .map((t,i)=>({t,i}));
-
-  toMatchWithIdx.sort((a,b)=>{
-    if(a.t.date < b.t.date) return -1;
-    if(a.t.date > b.t.date) return 1;
-    const today = new Date().toISOString().split('T')[0];
-    const aHasTime = a.t.datetime && !a.t.datetime.startsWith(today) && !a.t.datetime.endsWith('T00:00');
-    const bHasTime = b.t.datetime && !b.t.datetime.startsWith(today) && !b.t.datetime.endsWith('T00:00');
-    if(aHasTime && bHasTime) {
-      if(a.t.datetime < b.t.datetime) return -1;
-      if(a.t.datetime > b.t.datetime) return 1;
-    }
-    if(a.t.type==='buy' && b.t.type==='sell') return -1;
-    if(a.t.type==='sell' && b.t.type==='buy') return 1;
-    if(a.t.id < b.t.id) return -1;
-    if(a.t.id > b.t.id) return 1;
-    return 0;
+  // Step 3: Unified stack-based matching — processes each asset+broker chronologically
+  // Maintains open Long stack (buys) and Short stack (sells) 
+  // Correctly handles Long FIFO, Short FIFO, partial closes, and dust residuals
+  const groups={};
+  data.trades.filter(t=>t.matchedTo!=='futures').forEach(t=>{
+    const k=`${(t.asset||'').trim()}__${t.broker}`;
+    if(!groups[k]) groups[k]=[];
+    groups[k].push(t);
   });
 
-  const toMatch = toMatchWithIdx.map(x=>x.t);
-
-  // Match Long sells — FIFO with quantity tracking
-  const longSells=toMatch.filter(t=>t.type==='sell');
-  // Track remaining qty for each buy lot — include all buys
-  const buyRemaining={};
-  data.trades.filter(t=>t.type==='buy').forEach(t=>{
-    if(buyRemaining[t.id]===undefined) buyRemaining[t.id]=t.qty;
-  });
-
-  for(const sell of longSells){
-    const asset=(sell.asset||'').trim();
-    const broker=sell.broker;
-    const isStock=sell.class==='Stock/ETF';
-
-    if(isStock){
-      // Share Pool — use all buys up to sell date
-      const buys=data.trades.filter(t=>
-        t.type==='buy'&&t.side==='Long'&&
-        (t.asset||'').trim()===asset&&
-        t.broker===broker&&
-        t.date<=sell.date
-      );
-      if(!buys.length) continue;
-      const totalQty=buys.reduce((s,b)=>s+b.qty,0);
-      const totalCost=buys.reduce((s,b)=>s+(b.valueGBP||0),0);
-      const avg=totalQty>0?totalCost/totalQty:0;
-      sell.costBasisGBP=+(sell.qty*avg).toFixed(2);
-      sell.pnlGBP=+((sell.valueGBP||0)-sell.costBasisGBP).toFixed(2);
-      sell.matchedTo='pool';
-    } else {
-      // FIFO — oldest buy first, track remaining qty
-      const buys=data.trades.filter(t=>
-        t.type==='buy'&&
-        (t.asset||'').trim()===asset&&
-        t.broker===broker&&
-        t.date<=sell.date&&
-        (buyRemaining[t.id]===undefined||buyRemaining[t.id]>0)
-      ).sort((a,b)=>{
-        if(a.date<b.date) return -1;
-        if(a.date>b.date) return 1;
-        if(a.id<b.id) return -1;
-        if(a.id>b.id) return 1;
-        return 0;
-      });
-      if(!buys.length) continue;
-      let rem=sell.qty, cost=0;
-      let firstBuyId=null;
-      // 95% threshold: if sell qty is within 5% of buy qty, treat as full close
-      const sellQtyAdj = sell.qty;
-      for(const lot of buys){
-        if(rem<=0) break;
-        const avail=buyRemaining[lot.id]!==undefined?buyRemaining[lot.id]:lot.qty;
-        if(avail<=0) continue;
-        // 95% threshold: only consume full lot if sell qty is within 5% of available qty
-        // This handles crypto dust/residuals
-        const threshold = avail * 0.05;
-        const used = (rem >= avail - threshold) ? avail : Math.min(rem, avail);
-        cost+=used*(lot.priceGBP||lot.price||0);
-        buyRemaining[lot.id]=Math.max(0, avail-used);
-        rem-=used;
-        if(!firstBuyId) firstBuyId=lot.id;
+  const today_=new Date().toISOString().split('T')[0];
+  function sortTrades(arr){
+    return arr.sort((a,b)=>{
+      if(a.date<b.date) return -1;
+      if(a.date>b.date) return 1;
+      const aHasTime=a.datetime&&!a.datetime.startsWith(today_)&&!a.datetime.endsWith('T00:00');
+      const bHasTime=b.datetime&&!b.datetime.startsWith(today_)&&!b.datetime.endsWith('T00:00');
+      if(aHasTime&&bHasTime){
+        if(a.datetime<b.datetime) return -1;
+        if(a.datetime>b.datetime) return 1;
       }
-      sell.costBasisGBP=+cost.toFixed(2);
-      sell.pnlGBP=+((sell.valueGBP||0)-sell.costBasisGBP).toFixed(2);
-      sell.matchedTo=firstBuyId||buys[0].id;
-    }
+      if(a.id<b.id) return -1;
+      if(a.id>b.id) return 1;
+      return 0;
+    });
   }
 
-  // Match Short closes (buy closes a short sell)
-  // Only track Sells that were NOT matched by Long FIFO above
-  const sellRemaining={};
-  data.trades.filter(t=>t.type==='sell'&&!t.matchedTo).forEach(t=>{
-    if(sellRemaining[t.id]===undefined) sellRemaining[t.id]=t.qty;
+  Object.values(groups).forEach(trades=>{
+    sortTrades(trades);
+    const isStock=trades[0]?.class==='Stock/ETF';
+    const longStack=[];  // {trade, remaining}
+    const shortStack=[]; // {trade, remaining}
+
+    trades.forEach(t=>{
+      // Skip already confirmed
+      if(t.matchedTo&&t.matchedTo!=='futures') return;
+
+      const THRESHOLD=0.01; // 1% dust tolerance
+
+      if(t.type==='buy'){
+        if(shortStack.length>0){
+          // Close Short position
+          t.side='Short';
+          let rem=t.qty, proceeds=0, firstId=null;
+          while(rem>0&&shortStack.length>0){
+            const lot=shortStack[0];
+            const avail=lot.remaining;
+            const used=(rem>=avail*(1-THRESHOLD))?avail:Math.min(rem,avail);
+            proceeds+=used*(lot.trade.priceGBP||lot.trade.price||0);
+            lot.remaining=Math.max(0,avail-used);
+            rem-=used;
+            if(!firstId) firstId=lot.trade.id;
+            if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id;
+            if(lot.remaining<=0.000001) shortStack.shift();
+          }
+          t.pnlGBP=+(proceeds-(t.qty*(t.priceGBP||t.price||0))).toFixed(2);
+          t.matchedTo=firstId;
+        } else {
+          // Open Long
+          t.side='Long';
+          if(!t.matchedTo) t.matchedTo=null;
+          longStack.push({trade:t, remaining:t.qty});
+        }
+      } else {
+        // Sell
+        if(longStack.length>0){
+          // Close Long position
+          t.side='Long';
+          let rem=t.qty, cost=0, firstId=null;
+          if(isStock){
+            // Share Pool
+            const totalQty=longStack.reduce((s,l)=>s+l.remaining,0);
+            const totalCost=longStack.reduce((s,l)=>s+l.remaining*(l.trade.priceGBP||l.trade.price||0),0);
+            cost=t.qty*(totalQty>0?totalCost/totalQty:0);
+            firstId=longStack[0].trade.id;
+            let r=t.qty;
+            for(const l of longStack){
+              if(r<=0) break;
+              const used=Math.min(r,l.remaining);
+              l.remaining=Math.max(0,l.remaining-used);
+              r-=used;
+              if(!l.trade.matchedTo) l.trade.matchedTo=t.id;
+            }
+            while(longStack.length&&longStack[0].remaining<=0.000001) longStack.shift();
+          } else {
+            // FIFO
+            while(rem>0&&longStack.length>0){
+              const lot=longStack[0];
+              const avail=lot.remaining;
+              const used=(rem>=avail*(1-THRESHOLD))?avail:Math.min(rem,avail);
+              cost+=used*(lot.trade.priceGBP||lot.trade.price||0);
+              lot.remaining=Math.max(0,avail-used);
+              rem-=used;
+              if(!firstId) firstId=lot.trade.id;
+              if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id;
+              if(lot.remaining<=0.000001) longStack.shift();
+            }
+          }
+          t.costBasisGBP=+cost.toFixed(2);
+          t.pnlGBP=+((t.valueGBP||0)-cost).toFixed(2);
+          t.matchedTo=firstId;
+        } else {
+          // Open Short
+          t.side='Short';
+          if(!t.matchedTo) t.matchedTo=null;
+          shortStack.push({trade:t, remaining:t.qty});
+        }
+      }
+    });
   });
 
-  const shortBuys=toMatch.filter(t=>t.type==='buy'&&t.side==='Short');
-  for(const closeBuy of shortBuys){
-    const asset=(closeBuy.asset||'').trim();
-    // Find unmatched Sells for this asset (Short openings) — FIFO order
-    const openSells=[...data.trades].filter(t=>
-      t.type==='sell'&&
-      (t.asset||'').trim()===asset&&
-      t.broker===closeBuy.broker&&
-      t.date<=closeBuy.date&&
-      (sellRemaining[t.id]===undefined||sellRemaining[t.id]>0)
-    ).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-    if(!openSells.length) continue;
-
-    // FIFO: consume sell lots to match the buy
-    let rem=closeBuy.qty, proceeds=0;
-    let firstSellId=null;
-    for(const lot of openSells){
-      if(rem<=0) break;
-      const avail=sellRemaining[lot.id]!==undefined?sellRemaining[lot.id]:lot.qty;
-      if(avail<=0) continue;
-      const threshold=avail*0.05;
-      const used=(rem>=avail-threshold)?avail:Math.min(rem,avail);
-      proceeds+=used*(lot.priceGBP||lot.price||0);
-      sellRemaining[lot.id]=Math.max(0,avail-used);
-      rem-=used;
-      if(!firstSellId) firstSellId=lot.id;
-      if(!lot.matchedTo) lot.matchedTo=closeBuy.id;
-    }
-
-    const buyPriceGBP=closeBuy.priceGBP||closeBuy.price||0;
-    const closingCost=+(closeBuy.qty*buyPriceGBP).toFixed(2);
-    closeBuy.costBasisGBP=closingCost;
-    closeBuy.pnlGBP=+(proceeds-closingCost).toFixed(2);
-    closeBuy.matchedTo=firstSellId||openSells[0].id;
-  }
-
-  // Pending = Long sells with no match found in DB (genuinely missing history)
+  // Pending = unmatched sells (no buy history found)
   data.pendingMatches=data.trades
     .filter(t=>t.type==='sell'&&!t.matchedTo&&t.matchedTo!=='futures')
     .map(t=>t.id);
