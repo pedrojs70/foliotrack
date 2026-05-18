@@ -2002,9 +2002,10 @@ function autoMatchAll() {
         if(rem<=0) break;
         const avail=buyRemaining[lot.id]!==undefined?buyRemaining[lot.id]:lot.qty;
         if(avail<=0) continue;
-        // If remaining sell is within 5% of available buy, consume all
+        // 95% threshold: only consume full lot if sell qty is within 5% of available qty
+        // This handles crypto dust/residuals
         const threshold = avail * 0.05;
-        const used = (rem <= avail + threshold) ? avail : Math.min(rem, avail);
+        const used = (rem >= avail - threshold) ? avail : Math.min(rem, avail);
         cost+=used*(lot.priceGBP||lot.price||0);
         buyRemaining[lot.id]=Math.max(0, avail-used);
         rem-=used;
@@ -2044,7 +2045,7 @@ function autoMatchAll() {
       const avail=sellRemaining[lot.id]!==undefined?sellRemaining[lot.id]:lot.qty;
       if(avail<=0) continue;
       const threshold=avail*0.05;
-      const used=(rem<=avail+threshold)?avail:Math.min(rem,avail);
+      const used=(rem>=avail-threshold)?avail:Math.min(rem,avail);
       proceeds+=used*(lot.priceGBP||lot.price||0);
       sellRemaining[lot.id]=Math.max(0,avail-used);
       rem-=used;
