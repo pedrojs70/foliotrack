@@ -2110,9 +2110,13 @@ function getPositions() {
       // Exclude all futures trades
       if(t.matchedTo==='futures') return false;
       if(t.notes==='Futures') return false;
-      // Exclude trades before reset date for reset positions
+      // Exclude trades before reset datetime for reset positions
       const reset=data.resetPositions.find(r=>r.asset===t.asset&&r.broker===t.broker);
-      if(reset && t.date<=reset.resetDate) return false;
+      if(reset){
+        const tradeDT = t.datetime||t.date+'T00:00';
+        const resetDT = reset.resetDatetime||reset.resetDate+'T23:59';
+        if(tradeDT <= resetDT) return false;
+      }
       return true;
     })
     .sort((a,b)=>{
@@ -3215,12 +3219,12 @@ function setFilter(el,period) {
 }
 
 function resetPosition(asset, broker) {
-  const resetDate = new Date().toISOString().split('T')[0];
-  // Remove any existing reset for this asset+broker
+  const now = new Date().toISOString(); // full datetime
   data.resetPositions = data.resetPositions.filter(r=>!(r.asset===asset&&r.broker===broker));
-  data.resetPositions.push({asset, broker, resetDate});
+  data.resetPositions.push({asset, broker, resetDate: now.split('T')[0], resetDatetime: now});
   save();
   renderPositions();
+  renderResetPositions();
   toast(`Posição ${asset} resetada`);
 }
 
