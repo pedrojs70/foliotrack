@@ -340,9 +340,11 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
   <div class="pw-card">
     <div class="pw-logo">Folio<span>Track</span></div>
     <div class="pw-sub">Inicia sessão para aceder ao teu portfólio</div>
-    <input type="email" class="pw-input" id="pw-email" placeholder="Email" onkeydown="if(event.key==='Enter')$('pw-pass').focus()">
-    <input type="password" class="pw-input" id="pw-pass" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
-    <button class="pw-btn" onclick="doLogin()">Entrar</button>
+    <form id="login-form" autocomplete="on" onsubmit="event.preventDefault();doLogin()">
+      <input type="email" class="pw-input" id="pw-email" name="email" autocomplete="email" placeholder="Email" onkeydown="if(event.key==='Enter')$('pw-pass').focus()">
+      <input type="password" class="pw-input" id="pw-pass" name="password" autocomplete="current-password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+      <button type="submit" class="pw-btn">Entrar</button>
+    </form>
     <div class="pw-error" id="pw-error"></div>
   </div>
 </div>
