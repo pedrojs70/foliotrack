@@ -3632,12 +3632,13 @@ async function refreshLivePrices() {
   // Fetch US stocks via Twelve Data — batch call (up to 8 symbols)
   if(usAssets.length > 0) {
     const symbols = usAssets.map(p=>p.asset).join(',');
+    console.log('[TD batch] symbols:', symbols);
     try {
       const res = await fetch(`https://api.twelvedata.com/price?symbol=${symbols}&apikey=${TWELVE_DATA_KEY}`);
       if(res.ok) {
         const d = await res.json();
+        console.log('[TD batch] response:', d);
         for(const p of usAssets) {
-          // Batch response: if single symbol, response is {price:...}; if multiple, response is {SYMBOL:{price:...}}
           const pd = usAssets.length === 1 ? d : d[p.asset];
           if(pd?.price && !pd.code) {
             livePrices[p.asset]={price:parseFloat(pd.price), source:'twelvedata', currency:'USD'};
