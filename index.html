@@ -1034,6 +1034,7 @@ async function save() {
       pairs: data.pairs,
       fxRates: data.fxRates,
       pendingMatches: data.pendingMatches,
+      resetPositions: data.resetPositions||[],
       updatedAt: new Date().toISOString()
     });
     await db.collection('foliotrack').doc('portfolios').set({ list: portfolios });
