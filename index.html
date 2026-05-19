@@ -518,6 +518,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <div class="tabs" style="margin-bottom:0;"><div class="tab active" onclick="filterTrades('all',this)">All</div><div class="tab" onclick="filterTrades('buy',this)">Buys</div><div class="tab" onclick="filterTrades('sell',this)">Sells</div><div class="tab" onclick="filterTrades('stocks',this)">Stocks &amp; ETFs</div><div class="tab" onclick="filterTrades('crypto',this)">Crypto</div></div>
+          <div class="tabs" style="margin-bottom:0;"><div class="tab active" onclick="filterTradesSubclass('all',this)">All</div><div class="tab" onclick="filterTradesSubclass('spot',this)">Spot</div><div class="tab" onclick="filterTradesSubclass('futures',this)">Futures</div></div>
           <select id="trades-broker-filter" onchange="renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;">
             <option value="">All Brokers</option>
             <option value="IBKR">IBKR</option>
@@ -894,6 +895,7 @@ let data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRate
 let selectedTradeIds = new Set();
 let pendingBroker = null;
 let tradeFilterMode = 'all';
+let tradeSubclassFilter = 'all';
 let posFilterMode = 'all';
 let tradesPage = 1;
 const TRADES_PER_PAGE = 75;
@@ -2348,8 +2350,8 @@ function renderPositions() {
   else if(posFilterMode==='long')pos=all.filter(p=>p.side==='Long');
   else if(posFilterMode==='short')pos=all.filter(p=>p.side==='Short');
   else pos=all;
-  // Filter out dust positions below £15
-  pos=pos.filter(p=>p.totalCostGBP>=15);
+  // Filter out dust positions below £10
+  pos=pos.filter(p=>p.totalCostGBP>=10);
   if(brokerFilter) pos=pos.filter(p=>normBroker(p.broker)===brokerFilter);
   if(searchVal) pos=pos.filter(p=>(p.asset||'').toLowerCase().includes(searchVal)||(p.broker||'').toLowerCase().includes(searchVal));
   // Sort
@@ -2458,6 +2460,9 @@ function renderTrades() {
   else if(tradeFilterMode==='sell')trades=trades.filter(t=>t.type==='sell');
   else if(tradeFilterMode==='stocks')trades=trades.filter(t=>t.class==='Stock/ETF');
   else if(tradeFilterMode==='crypto')trades=trades.filter(t=>t.class==='Crypto');
+  // Apply subclass filter
+  if(tradeSubclassFilter==='spot') trades=trades.filter(t=>(t.subclass||'Spot').toLowerCase()==='spot'||t.notes!=='Futures');
+  else if(tradeSubclassFilter==='futures') trades=trades.filter(t=>t.subclass==='Futures'||t.notes==='Futures');
   // Broker filter
   const brokerFilter=$('trades-broker-filter')?.value||'';
   if(brokerFilter) trades=trades.filter(t=>normBroker(t.broker)===brokerFilter);
@@ -3167,6 +3172,7 @@ function setFilter(el,period) {
 
 function filterPos(f,el){posFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPositions();}
 function filterTrades(f,el){tradeFilterMode=f;tradesPage=1;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTrades();}
+function filterTradesSubclass(f,el){tradeSubclassFilter=f;tradesPage=1;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTrades();}
 function openModal(id){$(id).classList.add('open');}
 function closeModal(id){$(id).classList.remove('open');}
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
