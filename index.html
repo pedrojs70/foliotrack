@@ -1966,13 +1966,16 @@ function autoMatchAll() {
           // Close Short position
           t.side='Short';
           let rem=t.qty, proceeds=0, firstId=null;
-          while(rem>0&&shortStack.length>0){
+          const totalShortAvail=shortStack.reduce((s,l)=>s+l.remaining,0);
+          const buyQty=rem>totalShortAvail&&(rem-totalShortAvail)/rem<0.01?totalShortAvail:rem;
+          let adjRem=buyQty;
+          while(adjRem>0&&shortStack.length>0){
             const lot=shortStack[0];
             const avail=lot.remaining;
-            const used=Math.min(rem,avail);
+            const used=Math.min(adjRem,avail);
             proceeds+=used*(lot.trade.priceGBP||lot.trade.price||0);
             lot.remaining=avail-used;
-            rem-=used;
+            adjRem-=used;
             if(!firstId) firstId=lot.trade.id;
             if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id;
             if(lot.remaining<0.000001) shortStack.shift();
@@ -2008,17 +2011,22 @@ function autoMatchAll() {
             while(longStack.length&&longStack[0].remaining<0.000001) longStack.shift();
           } else {
             // FIFO
-            while(rem>0&&longStack.length>0){
+            // Check if sell qty slightly exceeds total available (exchange rounding)
+            const totalAvail=longStack.reduce((s,l)=>s+l.remaining,0);
+            const sellQty=rem>totalAvail&&(rem-totalAvail)/rem<0.01?totalAvail:rem;
+            let adjRem=sellQty;
+            while(adjRem>0&&longStack.length>0){
               const lot=longStack[0];
               const avail=lot.remaining;
-              const used=Math.min(rem,avail);
+              const used=Math.min(adjRem,avail);
               cost+=used*(lot.trade.priceGBP||lot.trade.price||0);
               lot.remaining=avail-used;
-              rem-=used;
+              adjRem-=used;
               if(!firstId) firstId=lot.trade.id;
               if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id;
               if(lot.remaining<0.000001) longStack.shift();
             }
+            rem=adjRem;
           }
           t.costBasisGBP=+cost.toFixed(2);
           t.pnlGBP=+((t.valueGBP||0)-cost).toFixed(2);
