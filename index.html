@@ -3606,8 +3606,8 @@ async function refreshLivePrices() {
         // Americano confirmado → Twelve Data
         try {
           const res = await fetch(`https://api.twelvedata.com/price?symbol=${p.asset}&apikey=${TWELVE_DATA_KEY}`);
-          if(res.ok){ const d=await res.json(); if(d?.price&&!d.code){livePrices[p.asset]={price:parseFloat(d.price),source:'twelvedata',currency:'USD'};fetched++;} }
-        } catch(e) {}
+          if(res.ok){ const d=await res.json(); console.log('[TD debug]', p.asset, d); if(d?.price&&!d.code){livePrices[p.asset]={price:parseFloat(d.price),source:'twelvedata',currency:'USD'};fetched++;} }
+        } catch(e) { console.log('[TD error]', p.asset, e); }
         await new Promise(r=>setTimeout(r,300));
       } else if(mapped) {
         // Europeu → Yahoo via Cloudflare Worker
