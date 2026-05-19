@@ -3556,7 +3556,7 @@ async function refreshLivePrices() {
     'GALP': {ticker:'GALP.LS', currency:'EUR'},
     'ALFEN':{ticker:'ALFEN.AS',currency:'EUR'},
     'BAB':  {ticker:'BAB.L',   currency:'GBP'},
-    'BEEM': {ticker:'BEEM.L',  currency:'GBP'},
+    'BEEM': null,
     'REP':  {ticker:'REP.MC',  currency:'EUR'},
     'PSG':  {ticker:'PSG.MC',  currency:'EUR'},
     'FAE':  {ticker:'FAE.MC',  currency:'EUR'},
@@ -3586,6 +3586,7 @@ async function refreshLivePrices() {
   }
 
   const stockPositions = pos.filter(p => p.class === 'Stock/ETF');
+  console.log('[prices debug] stock positions:', stockPositions.map(p=>p.asset));
 
   for(const p of stockPositions) {
     const broker = normBroker(p.broker);
