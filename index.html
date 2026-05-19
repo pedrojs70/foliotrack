@@ -2933,7 +2933,8 @@ async function saveTrade() {
   const tagsRaw=$('t-tags').value;
   const trade={
     id:genId(),type:$('t-type').value,asset,description:$('t-desc').value||asset,
-    broker:$('t-broker').value,date,qty:qty_,price,currency,priceGBP,valueGBP,fxRate,
+    broker:$('t-broker').value,date,datetime:new Date().toISOString().replace('Z','').slice(0,16),
+    qty:qty_,price,currency,priceGBP,valueGBP,fxRate,
     side:$('t-side').value,leverage:parseInt($('t-leverage').value)||1,
     fees,feesGBP:+(fees*fxRate).toFixed(2),
     class:$('t-class').value,
