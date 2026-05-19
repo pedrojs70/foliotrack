@@ -2312,10 +2312,22 @@ function renderDashboard() {
   // Fees — show filtered value
   $('m-fees').textContent=gbp(fFiltered);
 
-  // positions table
+  // positions table — apply same £10 market value filter as Open Positions tab
+  const usdgbp_dash=livePrices['__USDGBP__']||0.79;
+  const filteredPos=pos.filter(p=>{
+    const lp=livePrices[p.asset];
+    if(lp?.price){
+      let mv=0;
+      if(p.class==='Crypto') mv=p.totalQty*lp.price*usdgbp_dash;
+      else if(lp.currency==='GBP') mv=p.totalQty*lp.price;
+      else mv=p.totalQty*lp.price*usdgbp_dash;
+      return mv>=10;
+    }
+    return p.totalCostGBP>=10;
+  });
   const dpt=$('dash-pos-table');
-  if(!pos.length){dpt.innerHTML=emptyState('No positions yet','Import a CSV or add a trade to get started.');return;}
-  dpt.innerHTML=`<table><thead><tr><th>Asset</th><th>Broker</th><th>Side</th><th>Qty</th><th>Avg Cost</th><th>Cost Basis (GBP)</th></tr></thead><tbody>${pos.slice(0,6).map(p=>`<tr><td><strong>${p.asset}</strong> ${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td></tr>`).join('')}</tbody></table>`;
+  if(!filteredPos.length){dpt.innerHTML=emptyState('No positions yet','Import a CSV or add a trade to get started.');return;}
+  dpt.innerHTML=`<table><thead><tr><th>Asset</th><th>Broker</th><th>Side</th><th>Qty</th><th>Avg Cost</th><th>Cost Basis (GBP)</th></tr></thead><tbody>${filteredPos.slice(0,6).map(p=>`<tr><td><strong>${p.asset}</strong> ${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td></tr>`).join('')}</tbody></table>`;
 
   // broker alloc
   const bt=brokerTotals(), btTotal=Object.values(bt).reduce((s,v)=>s+v,0);
