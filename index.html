@@ -1953,7 +1953,9 @@ function autoMatchAll() {
     const shortStack=[]; // {trade, remaining}
 
     trades.forEach(t=>{
-      // Skip already confirmed
+      // Skip futures trades (P&L already set from CSV)
+      if(t.matchedTo==='futures') return;
+      // Skip already confirmed manual matches
       if(t.matchedTo&&t.matchedTo!=='futures') return;
 
       if(t.type==='buy'){
