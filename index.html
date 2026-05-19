@@ -891,7 +891,7 @@ const db = firebase.firestore();
 // ============================================================
 let portfolios = [{ id: 'main', name: 'Main Portfolio' }];
 let currentPortfolioId = 'main';
-let data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[] };
+let data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[] };
 let selectedTradeIds = new Set();
 let pendingBroker = null;
 let tradeFilterMode = 'all';
@@ -955,6 +955,7 @@ async function loadPortfolio(id) {
     data.pairs = d.pairs || [];
     data.fxRates = d.fxRates || {};
     data.pendingMatches = d.pendingMatches || [];
+    data.resetPositions = d.resetPositions || [];
 
     const totalChunks = d.tradeChunks || 0;
 
@@ -983,6 +984,7 @@ async function loadPortfolio(id) {
         pairs: data.pairs,
         fxRates: data.fxRates,
         pendingMatches: data.pendingMatches,
+        resetPositions: data.resetPositions,
         updatedAt: new Date().toISOString()
       });
       console.log('[migration] done. chunks:', newChunks);
@@ -1000,7 +1002,7 @@ async function loadPortfolio(id) {
       data.trades = [];
     }
   } else {
-    data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[] };
+    data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[] };
   }
 }
 
@@ -1966,9 +1968,7 @@ function autoMatchAll() {
           // Close Short position
           t.side='Short';
           let rem=t.qty, proceeds=0, firstId=null;
-          const totalShortAvail=shortStack.reduce((s,l)=>s+l.remaining,0);
-          const buyQty=rem>totalShortAvail&&(rem-totalShortAvail)/rem<0.01?totalShortAvail:rem;
-          let adjRem=buyQty;
+          let adjRem=rem;
           while(adjRem>0&&shortStack.length>0){
             const lot=shortStack[0];
             const avail=lot.remaining;
@@ -2011,10 +2011,6 @@ function autoMatchAll() {
             while(longStack.length&&longStack[0].remaining<0.000001) longStack.shift();
           } else {
             // FIFO
-            // Check if sell qty slightly exceeds total available (exchange rounding)
-            const totalAvail=longStack.reduce((s,l)=>s+l.remaining,0);
-            const sellQty=rem>totalAvail&&(rem-totalAvail)/rem<0.01?totalAvail:rem;
-            let adjRem=sellQty;
             while(adjRem>0&&longStack.length>0){
               const lot=longStack[0];
               const avail=lot.remaining;
@@ -2108,9 +2104,12 @@ function getPositions() {
     .filter(t=>{
       // Exclude stablecoins
       if(isStablecoin(t.asset)) return false;
-      // Exclude all futures trades — P&L already captured from CSV, positions handled separately
+      // Exclude all futures trades
       if(t.matchedTo==='futures') return false;
       if(t.notes==='Futures') return false;
+      // Exclude trades before reset date for reset positions
+      const reset=data.resetPositions.find(r=>r.asset===t.asset&&r.broker===t.broker);
+      if(reset && t.date<=reset.resetDate) return false;
       return true;
     })
     .sort((a,b)=>{
@@ -2427,7 +2426,7 @@ function renderPositions() {
   }
   const wrap=$('pos-table-wrap');
   if(!pos.length){wrap.innerHTML=emptyState('No positions','Import a CSV to populate.');return;}
-  wrap.innerHTML=`<table><thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty Open</th><th>Avg Cost</th><th>Cost Basis</th><th>Live Price</th><th>Market Value (GBP)</th><th>Unreal. P&L</th><th>Method</th><th>Since</th></tr></thead><tbody>${pos.map(p=>{
+  wrap.innerHTML=`<table><thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty Open</th><th>Avg Cost</th><th>Cost Basis</th><th>Live Price</th><th>Market Value (GBP)</th><th>Unreal. P&L</th><th>Method</th><th>Since</th><th></th></tr></thead><tbody>${pos.map(p=>{
     const method=p.class==='Crypto'?'<span class="badge badge-gray">FIFO</span>':'<span class="badge badge-gray">Pool</span>';
     const lp=livePrices[p.asset];
     const usdgbp=livePrices['__USDGBP__']||0.79;
@@ -2469,7 +2468,9 @@ function renderPositions() {
     }
 
     const tags=(p.tags||[]).map(t=>`<span class="tag-pill">${t}</span>`).join('');
-    return `<tr><td><strong>${p.asset}</strong></td><td>${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td><td>${livePriceCell}</td><td>${marketValCell}</td><td>${unrealCell}</td><td>${method}</td><td style="color:var(--text3);font-size:12px;">${p.openDate||p.since||'—'}</td></tr>`;
+    const isReset=data.resetPositions.some(r=>r.asset===p.asset&&r.broker===p.broker);
+    const resetBtn=`<button class="btn btn-sm" style="padding:2px 8px;font-size:11px;opacity:0.7;" onclick="resetPosition('${p.asset}','${p.broker}')" title="Ignorar resíduo e resetar posição">Reset</button>`;
+    return `<tr><td><strong>${p.asset}</strong></td><td>${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td><td>${livePriceCell}</td><td>${marketValCell}</td><td>${unrealCell}</td><td>${method}</td><td style="color:var(--text3);font-size:12px;">${p.openDate||p.since||'—'}</td><td>${resetBtn}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -3189,6 +3190,22 @@ function setFilter(el,period) {
     else badge.textContent=`${from.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})} – ${to.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})}`;
   }
   renderAll();
+}
+
+function resetPosition(asset, broker) {
+  const resetDate = new Date().toISOString().split('T')[0];
+  // Remove any existing reset for this asset+broker
+  data.resetPositions = data.resetPositions.filter(r=>!(r.asset===asset&&r.broker===broker));
+  data.resetPositions.push({asset, broker, resetDate});
+  save();
+  renderPositions();
+  toast(`Posição ${asset} resetada`);
+}
+
+function unresetPosition(asset, broker) {
+  data.resetPositions = data.resetPositions.filter(r=>!(r.asset===asset&&r.broker===broker));
+  save();
+  renderPositions();
 }
 
 function filterPos(f,el){posFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPositions();}
