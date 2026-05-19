@@ -580,7 +580,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
             <div class="metric-sub neu" id="pnl-cgt-sub">£3,000 remaining · UK FY 25/26</div>
           </div>
         </div>
-        <div class="grid2">
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;">
           <div class="card">
             <div class="card-head">
               <div class="card-title">Monthly P&amp;L</div>
@@ -623,6 +623,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
                   <option value="BingX">BingX</option>
                   <option value="Binance">Binance</option>
                 </select>
+                <button id="pnl-sort-btn" class="btn btn-secondary btn-sm" onclick="togglePnlSort()" title="Ordenar">P&amp;L ↓</button>
                 <button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
               </div>
             </div>
@@ -744,6 +745,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
         <div class="grid2">
           <div>
             <div class="card" style="margin-bottom:13px;"><div class="card-head"><div><div class="card-title">Snapshots</div><div class="card-sub">Auto-saved before each import</div></div></div><div id="snapshots-list" style="padding:6px 0;"><div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">No snapshots yet</div></div></div>
+            <div class="card"><div class="card-head"><div><div class="card-title">Posições Resetadas</div><div class="card-sub">Posições removidas manualmente das posições em aberto</div></div></div><div id="reset-positions-list" style="padding:6px 0;"><div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">Nenhum reset activo</div></div></div>
           </div>
           <div class="card"><div class="card-head"><div class="card-title">Manual Backup</div></div><div class="card-body">
             <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6;">Export all data as JSON. Save to computer or Google Drive. Restore on any device.</div>
@@ -2276,7 +2278,7 @@ function checkBnB() {
 function renderAll() {
   renderDashboard();renderPositions();renderTrades();
   renderDividends();renderPnL();renderPairs();
-  renderFees();renderTax();renderImportHistory();renderSnapshots();renderPendingMatches();
+  renderFees();renderTax();renderImportHistory();renderSnapshots();renderPendingMatches();renderResetPositions();
 }
 
 function renderDashboard() {
@@ -2646,7 +2648,7 @@ function renderPnL() {
     </div>
     <table>
       <thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Trades</th><th style="text-align:right;">P&amp;L</th></tr></thead>
-      <tbody>${Object.entries(byAsset).sort((a,b)=>b[1].pnl-a[1].pnl).map(([a,d])=>`
+      <tbody>${Object.entries(byAsset).sort((a,b)=>pnlSortMode==='alpha'?a[0].localeCompare(b[0]):b[1].pnl-a[1].pnl).map(([a,d])=>`
         <tr>
           <td><strong>${a}</strong></td>
           <td>${classBadge(d.class)}</td>
@@ -2858,6 +2860,25 @@ function renderPendingMatches() {
 
   html+=`</div></div>`;
   c.innerHTML=html;
+}
+
+function renderResetPositions() {
+  const c=document.getElementById('reset-positions-list');
+  if(!c) return;
+  if(!data.resetPositions||!data.resetPositions.length){
+    c.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">Nenhum reset activo</div>';
+    return;
+  }
+  c.innerHTML=data.resetPositions.map(r=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);">
+      <div>
+        <span style="font-weight:600;font-size:13px;">${r.asset}</span>
+        <span style="font-size:12px;color:var(--text3);margin-left:8px;">${r.broker}</span>
+        <span style="font-size:11px;color:var(--text3);margin-left:8px;">desde ${r.resetDate}</span>
+      </div>
+      <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 10px;" onclick="unresetPosition('${r.asset}','${r.broker}')">Anular Reset</button>
+    </div>
+  `).join('');
 }
 
 function renderImportHistory() {
@@ -3206,6 +3227,16 @@ function unresetPosition(asset, broker) {
   data.resetPositions = data.resetPositions.filter(r=>!(r.asset===asset&&r.broker===broker));
   save();
   renderPositions();
+  renderResetPositions();
+  toast(`Reset de ${asset} anulado`);
+}
+
+let pnlSortMode = 'pnl'; // 'pnl' or 'alpha'
+function togglePnlSort() {
+  pnlSortMode = pnlSortMode==='pnl' ? 'alpha' : 'pnl';
+  const btn=document.getElementById('pnl-sort-btn');
+  if(btn) btn.textContent = pnlSortMode==='pnl' ? 'P&L ↓' : 'A→Z';
+  renderPnL();
 }
 
 function filterPos(f,el){posFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPositions();}
