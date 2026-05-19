@@ -1492,9 +1492,9 @@ function mapBitgetFutures(obj) {
   const isLong=dir.includes('long');
   const futures=(obj['Futures']||'').trim();
   const asset=futures.replace(/USDT$/,'').trim();
-  // Use Trading volume (executed qty) and Average Price
-  const qty=Math.abs(parseFloat(obj['Trading volume']||obj['Executed']||0));
-  const price=parseFloat(obj['Average Price']||0);
+  // Use Executed (qty in base asset e.g. BTC) NOT Trading volume (which is in USDT)
+  const qty=Math.abs(parseFloat(obj['Executed']||obj['Order amount']||0));
+  const price=parseFloat(obj['Average Price']||obj['Price']||0);
   const dateStr=parseBitgetDate(obj['Date']||obj['Time']||'');
   const date=parseDateMDY(dateStr);
   const datetime=parseDateMDYFull(dateStr);
