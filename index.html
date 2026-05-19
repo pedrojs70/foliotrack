@@ -3586,7 +3586,6 @@ async function refreshLivePrices() {
   }
 
   const stockPositions = pos.filter(p => p.class === 'Stock/ETF');
-  console.log('[prices debug] stock positions:', stockPositions.map(p=>p.asset));
 
   for(const p of stockPositions) {
     const broker = normBroker(p.broker);
@@ -3601,43 +3600,52 @@ async function refreshLivePrices() {
       await new Promise(r=>setTimeout(r,200));
 
     } else {
-      const mapped = ibkrYahooMap[p.asset];
-      if(mapped === null) {
-        // Americano confirmado → Twelve Data
-        try {
-          const res = await fetch(`https://api.twelvedata.com/price?symbol=${p.asset}&apikey=${TWELVE_DATA_KEY}`);
-          if(res.ok){ const d=await res.json(); console.log('[TD debug]', p.asset, d); if(d?.price&&!d.code){livePrices[p.asset]={price:parseFloat(d.price),source:'twelvedata',currency:'USD'};fetched++;} }
-        } catch(e) { console.log('[TD error]', p.asset, e); }
-        await new Promise(r=>setTimeout(r,300));
-      } else if(mapped) {
-        // Europeu → Yahoo via Cloudflare Worker
-        try {
-          const price = await fetchYahooWorker(mapped.ticker);
-          if(price) {
-            // Convert to GBP based on currency
-            const cur = mapped.currency;
-            let gbpPrice = price;
-            if(cur === 'EUR') {
-              const eurGbp = livePrices['__EURGBP__'] || 0.86;
-              gbpPrice = price * eurGbp;
-            } else if(cur === 'AUD') {
-              gbpPrice = price * 0.50; // approximate AUD/GBP
-            }
-            // GBP prices from LSE are already in GBP (pence handled in fetchYahooWorker)
-            livePrices[p.asset]={price:gbpPrice, rawPrice:price, source:'yahoo', currency:'GBP'};
+      // Collect all non-HL stocks for batch processing
+      // Will be handled after the loop
+      continue;
+    }
+  }
+
+  // Batch fetch all IBKR/non-HL stocks via Twelve Data
+  const ibkrStocks = stockPositions.filter(p => !isHL(normBroker(p.broker)));
+  const europeanAssets = ibkrStocks.filter(p => ibkrYahooMap[p.asset] && ibkrYahooMap[p.asset] !== null);
+  const usAssets = ibkrStocks.filter(p => ibkrYahooMap[p.asset] === null || ibkrYahooMap[p.asset] === undefined);
+
+  // Fetch European stocks via Cloudflare Worker (one by one)
+  for(const p of europeanAssets) {
+    const mapped = ibkrYahooMap[p.asset];
+    if(!mapped) continue;
+    try {
+      const price = await fetchYahooWorker(mapped.ticker);
+      if(price) {
+        const cur = mapped.currency;
+        let gbpPrice = price;
+        if(cur === 'EUR') gbpPrice = price * (livePrices['__EURGBP__'] || 0.86);
+        else if(cur === 'AUD') gbpPrice = price * 0.50;
+        livePrices[p.asset]={price:gbpPrice, rawPrice:price, source:'yahoo', currency:'GBP'};
+        fetched++;
+      }
+    } catch(e) {}
+    await new Promise(r=>setTimeout(r,200));
+  }
+
+  // Fetch US stocks via Twelve Data — batch call (up to 8 symbols)
+  if(usAssets.length > 0) {
+    const symbols = usAssets.map(p=>p.asset).join(',');
+    try {
+      const res = await fetch(`https://api.twelvedata.com/price?symbol=${symbols}&apikey=${TWELVE_DATA_KEY}`);
+      if(res.ok) {
+        const d = await res.json();
+        for(const p of usAssets) {
+          // Batch response: if single symbol, response is {price:...}; if multiple, response is {SYMBOL:{price:...}}
+          const pd = usAssets.length === 1 ? d : d[p.asset];
+          if(pd?.price && !pd.code) {
+            livePrices[p.asset]={price:parseFloat(pd.price), source:'twelvedata', currency:'USD'};
             fetched++;
           }
-        } catch(e) {}
-        await new Promise(r=>setTimeout(r,200));
-      } else {
-        // Não mapeado → tenta Twelve Data
-        try {
-          const res = await fetch(`https://api.twelvedata.com/price?symbol=${p.asset}&apikey=${TWELVE_DATA_KEY}`);
-          if(res.ok){ const d=await res.json(); if(d?.price&&!d.code){livePrices[p.asset]={price:parseFloat(d.price),source:'twelvedata',currency:'USD'};fetched++;} }
-        } catch(e) {}
-        await new Promise(r=>setTimeout(r,300));
+        }
       }
-    }
+    } catch(e) { console.log('[TD batch error]', e); }
   }
 
   if(status) status.textContent=`${fetched} prices updated · 15min delay`;
