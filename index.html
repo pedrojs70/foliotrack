@@ -1956,8 +1956,6 @@ function autoMatchAll() {
       // Skip already confirmed
       if(t.matchedTo&&t.matchedTo!=='futures') return;
 
-      const THRESHOLD=0.01; // 1% dust tolerance
-
       if(t.type==='buy'){
         if(shortStack.length>0){
           // Close Short position
@@ -1966,13 +1964,13 @@ function autoMatchAll() {
           while(rem>0&&shortStack.length>0){
             const lot=shortStack[0];
             const avail=lot.remaining;
-            const used=(rem>=avail*(1-THRESHOLD))?avail:Math.min(rem,avail);
+            const used=Math.min(rem,avail);
             proceeds+=used*(lot.trade.priceGBP||lot.trade.price||0);
-            lot.remaining=Math.max(0,avail-used);
+            lot.remaining=avail-used;
             rem-=used;
             if(!firstId) firstId=lot.trade.id;
-            if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id; // only set once
-            if(lot.remaining<=0.000001) shortStack.shift();
+            if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id;
+            if(lot.remaining<0.000001) shortStack.shift();
           }
           t.pnlGBP=+(proceeds-(t.qty*(t.priceGBP||t.price||0))).toFixed(2);
           t.matchedTo=firstId;
@@ -2000,38 +1998,39 @@ function autoMatchAll() {
               const used=Math.min(r,l.remaining);
               l.remaining=Math.max(0,l.remaining-used);
               r-=used;
-              if(!l.trade.matchedTo) l.trade.matchedTo=t.id; // only set once
+              if(!l.trade.matchedTo) l.trade.matchedTo=t.id;
             }
-            while(longStack.length&&longStack[0].remaining<=0.000001) longStack.shift();
+            while(longStack.length&&longStack[0].remaining<0.000001) longStack.shift();
           } else {
             // FIFO
             while(rem>0&&longStack.length>0){
               const lot=longStack[0];
               const avail=lot.remaining;
-              const used=(rem>=avail*(1-THRESHOLD))?avail:Math.min(rem,avail);
+              const used=Math.min(rem,avail);
               cost+=used*(lot.trade.priceGBP||lot.trade.price||0);
-              lot.remaining=Math.max(0,avail-used);
+              lot.remaining=avail-used;
               rem-=used;
               if(!firstId) firstId=lot.trade.id;
-              if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id; // only set once
-              if(lot.remaining<=0.000001) longStack.shift();
+              if(!lot.trade.matchedTo) lot.trade.matchedTo=t.id;
+              if(lot.remaining<0.000001) longStack.shift();
             }
           }
           t.costBasisGBP=+cost.toFixed(2);
           t.pnlGBP=+((t.valueGBP||0)-cost).toFixed(2);
           t.matchedTo=firstId;
         } else {
-          // No Long position open — this sell has no matching buy
-          // Mark as pending (orphan sell from before import period)
-          // Do NOT open a Short automatically — we can't know if it was intentional
-          t.side='Short'; // mark side for display
-          t.matchedTo=null; // will appear in pendingMatches
+          // No Long open — open Short (sell without prior buy)
+          t.side='Short';
+          t.matchedTo=null;
+          shortStack.push({trade:t, remaining:t.qty});
         }
       }
     });
   });
 
-  // Pending = unmatched sells (no buy history found)
+  // Pending = sells that remain unmatched after processing
+  // These are Shorts that were never closed (open Short positions)
+  // or genuine orphans — both appear in Open Positions as Short
   data.pendingMatches=data.trades
     .filter(t=>t.type==='sell'&&!t.matchedTo&&t.matchedTo!=='futures')
     .map(t=>t.id);
@@ -2348,6 +2347,8 @@ function renderPositions() {
   else if(posFilterMode==='long')pos=all.filter(p=>p.side==='Long');
   else if(posFilterMode==='short')pos=all.filter(p=>p.side==='Short');
   else pos=all;
+  // Filter out dust positions below £15
+  pos=pos.filter(p=>p.totalCostGBP>=15);
   if(brokerFilter) pos=pos.filter(p=>normBroker(p.broker)===brokerFilter);
   if(searchVal) pos=pos.filter(p=>(p.asset||'').toLowerCase().includes(searchVal)||(p.broker||'').toLowerCase().includes(searchVal));
   // Sort
