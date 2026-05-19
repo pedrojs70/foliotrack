@@ -899,7 +899,7 @@ let tradeSubclassFilter = 'all';
 let posFilterMode = 'all';
 let tradesPage = 1;
 const TRADES_PER_PAGE = 75;
-let currentPeriod = 'fy2526';
+let currentPeriod = 'all';
 
 function getFilterDates() {
   const from = $('date-from')?.value;
@@ -1850,7 +1850,8 @@ async function processFile(file, hint) {
   });
 
   data.trades.push(...newTrades);
-  data.trades.sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
+  function _normDT(t){ const dt=t.datetime||t.date+'T00:00'; return dt.replace(/T(\d):/,'T0$1:'); }
+  data.trades.sort((a,b)=>_normDT(a)>_normDT(b)?1:_normDT(a)<_normDT(b)?-1:0);
   data.dividends.push(...newDividends);
   const skippedDiv = result.dividends.length - newDividends.length;
   data.imports.push({id:genId(),date:today(),broker:result.broker,filename:file.name,trades:newTrades.length,dividends:newDividends.length,skipped,status:'done'});
@@ -2350,8 +2351,19 @@ function renderPositions() {
   else if(posFilterMode==='long')pos=all.filter(p=>p.side==='Long');
   else if(posFilterMode==='short')pos=all.filter(p=>p.side==='Short');
   else pos=all;
-  // Filter out dust positions below £10
-  pos=pos.filter(p=>p.totalCostGBP>=10);
+  // Filter out dust positions below £10 (use market value if available, cost basis as fallback)
+  const usdgbp_=livePrices['__USDGBP__']||0.79;
+  pos=pos.filter(p=>{
+    const lp=livePrices[p.asset];
+    if(lp?.price){
+      let mv=0;
+      if(p.class==='Crypto') mv=p.totalQty*lp.price*usdgbp_;
+      else if(lp.currency==='GBP') mv=p.totalQty*lp.price;
+      else mv=p.totalQty*lp.price*usdgbp_;
+      return mv>=10;
+    }
+    return p.totalCostGBP>=10;
+  });
   if(brokerFilter) pos=pos.filter(p=>normBroker(p.broker)===brokerFilter);
   if(searchVal) pos=pos.filter(p=>(p.asset||'').toLowerCase().includes(searchVal)||(p.broker||'').toLowerCase().includes(searchVal));
   // Sort
@@ -2894,7 +2906,8 @@ async function saveTrade() {
     notes:$('t-notes').value,matchedTo:null,pnlGBP:null,pairId:null
   };
   data.trades.push(trade);
-  data.trades.sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
+  function _normDT(t){ const dt=t.datetime||t.date+'T00:00'; return dt.replace(/T(\d):/,'T0$1:'); }
+  data.trades.sort((a,b)=>_normDT(a)>_normDT(b)?1:_normDT(a)<_normDT(b)?-1:0);
   if(trade.type==='sell'){data.pendingMatches.push(trade.id);}
   await save();renderAll();closeModal('modal-trade');
   toast(`Added: ${trade.type.toUpperCase()} ${qty(qty_)} ${asset}`,'success');
@@ -3323,8 +3336,10 @@ auth.onAuthStateChanged(user => {
 
 function init() {
   const fyChip=document.querySelector('.date-chip[onclick*="fy2526"]');
-  if(fyChip) fyChip.classList.add('active');
-  setFilter(fyChip||document.querySelector('.date-chip'),'fy2526');
+  if(fyChip) fyChip.classList.remove('active');
+  const allChip=document.querySelector('.date-chip[onclick*="all"]');
+  if(allChip) allChip.classList.add('active');
+  setFilter(allChip||document.querySelector('.date-chip'),'all');
   loadLiveFX();
   setInterval(loadLiveFX,60000);
   load().then(()=>refreshLivePrices());
