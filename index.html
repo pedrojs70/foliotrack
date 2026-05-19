@@ -2095,18 +2095,17 @@ function getPositions() {
   // For everything else (IBKR stocks, BingX spot, HL, etc.) include all
   const tradesToProcess=[...data.trades]
     .filter(t=>{
-      // Exclude stablecoins from positions
+      // Exclude stablecoins
       if(isStablecoin(t.asset)) return false;
-      // Exclude Bitget/BingX futures OPEN trades (Direction contains 'Open')
-      // These are already accounted for in the Close trade P&L
-      if((t.broker==='Bitget'||t.broker==='BingX') && t.notes==='Futures') {
-        // Only include if it's a Close (has pnlGBP from CSV)
-        // Open trades have pnlGBP=null or 0 and _rawPnlUSDT=0
-        if(t._rawPnlUSDT===0||t._rawPnlUSDT===undefined) return false;
-      }
+      // Exclude all futures trades — P&L already captured from CSV, positions handled separately
+      if(t.matchedTo==='futures') return false;
+      if(t.notes==='Futures') return false;
       return true;
     })
-    .sort((a,b)=>new Date(a.datetime||a.date)-new Date(b.datetime||b.date));
+    .sort((a,b)=>{
+      function normDT(x){ const dt=x.datetime||x.date+'T00:00'; return dt.replace(/T(\d):/, 'T0$1:'); }
+      return normDT(a)>normDT(b)?1:normDT(a)<normDT(b)?-1:0;
+    });
 
   tradesToProcess.forEach(t=>{
     const asset=(t.asset||'').trim();
