@@ -2013,6 +2013,7 @@ function autoMatchAll() {
             while(longStack.length&&longStack[0].remaining<0.000001) longStack.shift();
           } else {
             // FIFO
+            let adjRem=rem;
             while(adjRem>0&&longStack.length>0){
               const lot=longStack[0];
               const avail=lot.remaining;
