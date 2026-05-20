@@ -3570,14 +3570,16 @@ async function refreshLivePrices() {
     'DAC':  null,
   };
 
-  async function fetchYahooWorker(yahooTicker) {
+  async function fetchYahooWorker(yahooTicker, currency='GBP') {
     const isLSE = yahooTicker.endsWith('.L');
     const res = await fetch(`${WORKER_URL}/?ticker=${yahooTicker}`);
     if(!res.ok) return null;
     const d = await res.json();
     const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
     if(!price) return null;
-    return isLSE ? price/100 : price;
+    // LSE GBP stocks are quoted in pence — divide by 100
+    // LSE USD/EUR stocks are already in the correct currency
+    return (isLSE && currency==='GBP') ? price/100 : price;
   }
 
   const stockPositions = pos.filter(p => p.class === 'Stock/ETF');
@@ -3611,7 +3613,7 @@ async function refreshLivePrices() {
     const mapped = ibkrYahooMap[p.asset];
     if(!mapped) continue;
     try {
-      const price = await fetchYahooWorker(mapped.ticker);
+      const price = await fetchYahooWorker(mapped.ticker, mapped.currency);
       if(price) {
         const cur = mapped.currency;
         let gbpPrice = price;
