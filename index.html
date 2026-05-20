@@ -520,13 +520,6 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
             <option value="Bybit">Bybit</option>
           </select>
           <input type="text" id="pos-search" placeholder="Search asset..." oninput="renderPositions()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;width:180px;">
-          <select id="pos-sort" onchange="renderPositions()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;">
-            <option value="name">Sort: Name</option>
-            <option value="value_desc">Sort: Value ↓</option>
-            <option value="value_asc">Sort: Value ↑</option>
-            <option value="date_desc">Sort: Date ↓</option>
-            <option value="date_asc">Sort: Date ↑</option>
-          </select>
         </div>
         <div id="pos-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;"></div>
         <div class="card"><div class="card-head"><div><div class="card-title">Open Positions</div><div class="card-sub" id="pos-sub">—</div></div><div style="display:flex;gap:6px;align-items:center;"><span id="prices-status" style="font-size:11px;color:var(--text3);"></span><button class="btn btn-secondary btn-sm" onclick="refreshLivePrices()" id="btn-refresh-prices">↻ Refresh Prices</button><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div></div><div class="table-wrap" id="pos-table-wrap"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-title">No positions</div></div></div></div>
@@ -920,6 +913,7 @@ let pendingBroker = null;
 let tradeFilterMode = 'all';
 let tradeSubclassFilter = 'all';
 let posFilterMode = 'all';
+let posSort = {col: 'name', dir: 1}; // col: field, dir: 1=asc, -1=desc
 let tradesPage = 1;
 const TRADES_PER_PAGE = 75;
 let currentPeriod = 'all';
@@ -2403,7 +2397,6 @@ function renderPositions() {
   let pos=all;
   const brokerFilter=$('pos-broker-filter')?.value||'';
   const searchVal=($('pos-search')?.value||'').toLowerCase();
-  const sortVal=$('pos-sort')?.value||'name';
   if(posFilterMode==='stocks')pos=all.filter(p=>p.class!=='Crypto');
   else if(posFilterMode==='crypto')pos=all.filter(p=>p.class==='Crypto');
   else if(posFilterMode==='long')pos=all.filter(p=>p.side==='Long');
@@ -2411,12 +2404,34 @@ function renderPositions() {
   else pos=all;
   if(brokerFilter) pos=pos.filter(p=>normBroker(p.broker)===brokerFilter);
   if(searchVal) pos=pos.filter(p=>(p.asset||'').toLowerCase().includes(searchVal)||(p.broker||'').toLowerCase().includes(searchVal));
-  // Sort
-  if(sortVal==='name') pos.sort((a,b)=>a.asset.localeCompare(b.asset));
-  else if(sortVal==='value_desc') pos.sort((a,b)=>b.totalCostGBP-a.totalCostGBP);
-  else if(sortVal==='value_asc') pos.sort((a,b)=>a.totalCostGBP-b.totalCostGBP);
-  else if(sortVal==='date_desc') pos.sort((a,b)=>new Date(b.since)-new Date(a.since));
-  else if(sortVal==='date_asc') pos.sort((a,b)=>new Date(a.since)-new Date(b.since));
+  // Sort by posSort
+  pos.sort((a,b)=>{
+    let av,bv;
+    switch(posSort.col){
+      case 'name': av=a.asset; bv=b.asset; break;
+      case 'class': av=a.class; bv=b.class; break;
+      case 'broker': av=normBroker(a.broker); bv=normBroker(b.broker); break;
+      case 'side': av=a.side; bv=b.side; break;
+      case 'qty': av=a.totalQty; bv=b.totalQty; break;
+      case 'avgcost': av=a.avgCostGBP; bv=b.avgCostGBP; break;
+      case 'cost': av=a.totalCostGBP; bv=b.totalCostGBP; break;
+      case 'live': av=livePrices[a.asset]?.price||0; bv=livePrices[b.asset]?.price||0; break;
+      case 'market': {
+        const usdg=livePrices['__USDGBP__']||0.79;
+        const mv=(p)=>{ const lp=livePrices[p.asset]; if(!lp?.price) return 0; if(p.class==='Crypto') return p.totalQty*lp.price*usdg; if(lp.currency==='GBP') return p.totalQty*lp.price; return p.totalQty*lp.price*usdg; };
+        av=mv(a); bv=mv(b); break;
+      }
+      case 'unreal': {
+        const usdg=livePrices['__USDGBP__']||0.79;
+        const ur=(p)=>{ const lp=livePrices[p.asset]; if(!lp?.price) return 0; let mv=0; if(p.class==='Crypto') mv=p.totalQty*lp.price*usdg; else if(lp.currency==='GBP') mv=p.totalQty*lp.price; else mv=p.totalQty*lp.price*usdg; return p.side==='Short'?p.totalCostGBP-mv:mv-p.totalCostGBP; };
+        av=ur(a); bv=ur(b); break;
+      }
+      case 'since': av=a.since||''; bv=b.since||''; break;
+      default: av=a.asset; bv=b.asset;
+    }
+    if(typeof av==='string') return posSort.dir*av.localeCompare(bv);
+    return posSort.dir*(av-bv);
+  });
   $('pos-sub').textContent=`${pos.length} positions · ${gbp(pos.reduce((s,p)=>s+p.totalCostGBP,0))} cost basis`;
 
   // Summary cards — include ALL positions including HL
@@ -2462,7 +2477,9 @@ function renderPositions() {
   }
   const wrap=$('pos-table-wrap');
   if(!pos.length){wrap.innerHTML=emptyState('No positions','Import a CSV to populate.');return;}
-  wrap.innerHTML=`<table><thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty Open</th><th>Avg Cost</th><th>Cost Basis</th><th>Live Price</th><th>Market Value (GBP)</th><th>Unreal. P&L</th><th>Method</th><th>Since</th><th></th></tr></thead><tbody>${pos.map(p=>{
+  const si=(col)=>posSort.col===col?(posSort.dir===1?' ↑':' ↓'):'';
+  const th=(col,label)=>`<th style="cursor:pointer;user-select:none;" onclick="sortPos('${col}')">${label}${si(col)}</th>`;
+  wrap.innerHTML=`<table><thead><tr>${th('name','Asset')}${th('class','Class')}${th('broker','Broker')}${th('side','Side')}${th('qty','Qty Open')}${th('avgcost','Avg Cost')}${th('cost','Cost Basis')}${th('live','Live Price')}${th('market','Market Value (GBP)')}${th('unreal','Unreal. P&L')}<th>Method</th>${th('since','Since')}<th></th></tr></thead><tbody>${pos.map(p=>{
     const method=p.class==='Crypto'?'<span class="badge badge-gray">FIFO</span>':'<span class="badge badge-gray">Pool</span>';
     const lp=livePrices[p.asset];
     const usdgbp=livePrices['__USDGBP__']||0.79;
@@ -3309,6 +3326,12 @@ function toggleTheme() {
     });
   }
 })();
+
+function sortPos(col){
+  if(posSort.col===col) posSort.dir*=-1;
+  else { posSort.col=col; posSort.dir=1; }
+  renderPositions();
+}
 
 function filterPos(f,el){posFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPositions();}
 function filterTrades(f,el){tradeFilterMode=f;tradesPage=1;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTrades();}
