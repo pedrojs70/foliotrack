@@ -637,7 +637,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
                   <option value="BingX">BingX</option>
                   <option value="Binance">Binance</option>
                 </select>
-                <button id="pnl-sort-btn" class="btn btn-secondary btn-sm" onclick="togglePnlSort()" title="Ordenar">P&amp;L ↓</button>
+                <button id="pnl-sort-btn" class="btn btn-secondary btn-sm" onclick="togglePnlSort()" title="Ordenar">P&amp;L ↓ ganhos</button>
                 <button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
               </div>
             </div>
@@ -2699,7 +2699,7 @@ function renderPnL() {
     </div>
     <table>
       <thead><tr><th>Asset</th><th>Class</th><th>Broker</th><th>Trades</th><th style="text-align:right;">P&amp;L</th></tr></thead>
-      <tbody>${Object.entries(byAsset).sort((a,b)=>pnlSortMode==='alpha'?a[0].localeCompare(b[0]):b[1].pnl-a[1].pnl).map(([a,d])=>`
+      <tbody>${Object.entries(byAsset).sort((a,b)=>pnlSortMode==='alpha'?a[0].localeCompare(b[0]):pnlSortMode==='losses'?a[1].pnl-b[1].pnl:b[1].pnl-a[1].pnl).map(([a,d])=>`
         <tr>
           <td><strong>${a}</strong></td>
           <td>${classBadge(d.class)}</td>
@@ -3293,11 +3293,13 @@ function removeReset(asset, broker) {
   toast(`Registo de reset de ${asset} removido`);
 }
 
-let pnlSortMode = 'pnl'; // 'pnl' or 'alpha'
+let pnlSortMode = 'gains'; // 'gains', 'losses', or 'alpha'
 function togglePnlSort() {
-  pnlSortMode = pnlSortMode==='pnl' ? 'alpha' : 'pnl';
+  if(pnlSortMode==='gains') pnlSortMode='losses';
+  else if(pnlSortMode==='losses') pnlSortMode='alpha';
+  else pnlSortMode='gains';
   const btn=document.getElementById('pnl-sort-btn');
-  if(btn) btn.textContent = pnlSortMode==='pnl' ? 'P&L ↓' : 'A→Z';
+  if(btn) btn.textContent = pnlSortMode==='gains' ? 'P&L ↓ ganhos' : pnlSortMode==='losses' ? 'P&L ↓ perdas' : 'A→Z';
   renderPnL();
 }
 
