@@ -466,13 +466,13 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
         <div class="metrics" id="dash-metrics">
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--accent),transparent);"></div><div class="metric-label">Total Cost Basis</div><div class="metric-value" id="m-total">£0</div><div class="metric-sub neu" id="m-total-sub">no trades yet</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--blue),transparent);"></div><div class="metric-label">Open Positions</div><div class="metric-value" id="m-positions">0</div><div class="metric-sub neu" id="m-positions-sub">0 brokers</div></div>
-          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--purple),transparent);"></div><div class="metric-label">Realised P&amp;L (UK FY)</div><div class="metric-value" id="m-realised">£0</div><div class="metric-sub neu" id="m-realised-sub">0 closed</div></div>
-          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--amber),transparent);"></div><div class="metric-label">Total Fees (UK FY)</div><div class="metric-value" id="m-fees">£0</div><div class="metric-sub neu">all brokers</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--purple),transparent);"></div><div class="metric-label">Realised P&amp;L</div><div class="metric-value" id="m-realised">£0</div><div class="metric-sub neu" id="m-realised-sub">0 closed</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--amber),transparent);"></div><div class="metric-label">Total Fees</div><div class="metric-value" id="m-fees">£0</div><div class="metric-sub neu">all brokers</div></div>
         </div>
         <div class="grid2">
           <div class="card">
-            <div class="card-head"><div><div class="card-title">Open Positions</div><div class="card-sub">Cost basis in GBP</div></div><span class="card-link" onclick="showView('positions')">View all →</span></div>
-            <div class="table-wrap" id="dash-pos-table"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-title">No positions yet</div><div class="empty-sub">Import a CSV or add a trade to get started.</div></div></div>
+            <div class="card-head"><div><div class="card-title">Top Gainers &amp; Losers</div><div class="card-sub">By realised P&amp;L</div></div><span class="card-link" onclick="showView('pnl')">Full →</span></div>
+            <div class="table-wrap" id="dash-gainers-table"><div class="empty"><div class="empty-title">No closed trades yet</div></div></div>
           </div>
           <div style="display:flex;flex-direction:column;gap:12px;">
             <div class="card"><div class="card-head"><div class="card-title">By Broker</div></div><div class="card-body"><div class="alloc-list" id="dash-broker-alloc"><div style="font-size:12px;color:var(--text3);text-align:center;padding:8px;">No data</div></div></div></div>
@@ -481,7 +481,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
         </div>
         <div class="grid2">
           <div class="card"><div class="card-head"><div class="card-title">Monthly P&amp;L</div><span class="card-link" onclick="showView('pnl')">Full →</span></div><div class="card-body"><div class="bar-chart" style="height:90px;" id="dash-pnl-chart"><div style="font-size:12px;color:var(--text3);text-align:center;width:100%;padding:25px 0;">No data</div></div></div></div>
-          <div class="card"><div class="card-head"><div class="card-title">Quick Import</div><span class="card-link" onclick="showView('import')">All →</span></div><div class="card-body" style="padding-top:8px;"><div class="import-zone" onclick="triggerImport()"><div class="import-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><div style="font-size:13px;font-weight:500;margin-bottom:3px;">Drop CSV here</div><div style="font-size:12px;color:var(--text2);">Auto-detects broker</div><div class="broker-pills"><span class="broker-pill">IBKR</span><span class="broker-pill">HL</span><span class="broker-pill">Binance</span><span class="broker-pill">Bybit</span><span class="broker-pill">Bitget</span><span class="broker-pill">BingX</span><span class="broker-pill">Capital.com</span></div></div></div></div>
+          <div class="card"><div class="card-head"><div class="card-title">Recent Activity</div><span class="card-link" onclick="showView('trades')">All →</span></div><div class="table-wrap" id="dash-recent-table"><div class="empty"><div class="empty-title">No closed trades yet</div></div></div></div>
         </div>
       </div>
     </div>
@@ -2292,44 +2292,54 @@ function renderAll() {
 function renderDashboard() {
   const pos=getPositions();
   const total=pos.reduce((s,p)=>s+p.totalCostGBP,0);
-  const rFY=realisedFY();
   const rFiltered=realisedFiltered();
-  const fFY=totalFeesFY();
   const fFiltered=totalFeesFiltered();
   const brokers=new Set(pos.map(p=>normBroker(p.broker)));
   const {from,to}=getFilterDates();
   const fromVal=$('date-from')?.value||'';
   const toVal=$('date-to')?.value||'';
   const isAll=fromVal==='2018-01-01'&&toVal==='2099-01-01';
-  const isFY2526=fromVal==='2025-04-01'&&toVal==='2026-03-31';
 
   $('m-total').textContent=gbp(total);
   $('m-total-sub').textContent='Open positions cost basis';
   $('m-positions').textContent=pos.length;
   $('m-positions-sub').textContent=`across ${brokers.size} broker${brokers.size!==1?'s':''}`;
-  // Realised P&L — show filtered value
   $('m-realised').textContent=gbp(rFiltered);
   const closedCount=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null&&inFilterRange(t.date)).length;
-  $('m-realised-sub').textContent=`${closedCount} closed trades · ${isAll?'all time':isFY2526?'UK FY 25/26':'selected period'}`;
-  // Fees — show filtered value
+  $('m-realised-sub').textContent=`${closedCount} closed trades · ${isAll?'all time':'selected period'}`;
   $('m-fees').textContent=gbp(fFiltered);
 
-  // positions table — apply same £10 market value filter as Open Positions tab
-  const usdgbp_dash=livePrices['__USDGBP__']||0.79;
-  const filteredPos=pos.filter(p=>{
-    const lp=livePrices[p.asset];
-    if(lp?.price){
-      let mv=0;
-      if(p.class==='Crypto') mv=p.totalQty*lp.price*usdgbp_dash;
-      else if(lp.currency==='GBP') mv=p.totalQty*lp.price;
-      else mv=p.totalQty*lp.price*usdgbp_dash;
-      return mv>=10;
-    }
-    return p.totalCostGBP>=10;
+  // Top Gainers & Losers
+  const byAsset={};
+  data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null).forEach(t=>{
+    byAsset[t.asset]=byAsset[t.asset]||{pnl:0};
+    byAsset[t.asset].pnl+=t.pnlGBP;
   });
-  const dpt=$('dash-pos-table');
-  if(!filteredPos.length){dpt.innerHTML=emptyState('No positions yet','Import a CSV or add a trade to get started.');return;}
-  dpt.innerHTML=`<table><thead><tr><th>Asset</th><th>Broker</th><th>Side</th><th>Qty</th><th>Avg Cost</th><th>Cost Basis (GBP)</th></tr></thead><tbody>${filteredPos.slice(0,6).map(p=>`<tr><td><strong>${p.asset}</strong> ${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td></tr>`).join('')}</tbody></table>`;
+  const sorted=Object.entries(byAsset).sort((a,b)=>b[1].pnl-a[1].pnl);
+  const top3=sorted.slice(0,3);
+  const bot3=sorted.slice(-3).reverse();
+  const gainersEl=$('dash-gainers-table');
+  if(!sorted.length){gainersEl.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">No closed trades yet</div>';}
+  else {
+    gainersEl.innerHTML=`<table><thead><tr><th>Asset</th><th style="text-align:right;">P&L</th></tr></thead><tbody>
+      <tr><td colspan="2" style="font-size:11px;color:var(--text3);padding:8px 12px 4px;font-weight:600;">TOP GAINERS</td></tr>
+      ${top3.map(([a,d])=>`<tr><td><strong>${a}</strong></td><td class="mono" style="text-align:right;color:${d.pnl>=0?'var(--green)':'var(--red)'};">${d.pnl>=0?'+':''}${gbp(d.pnl)}</td></tr>`).join('')}
+      <tr><td colspan="2" style="font-size:11px;color:var(--text3);padding:8px 12px 4px;font-weight:600;">TOP LOSERS</td></tr>
+      ${bot3.filter(([a])=>!top3.find(([b])=>b===a)).map(([a,d])=>`<tr><td><strong>${a}</strong></td><td class="mono" style="text-align:right;color:var(--red);">${gbp(d.pnl)}</td></tr>`).join('')}
+    </tbody></table>`;
+  }
+
+  // Recent Activity — last 5 closed trades with P&L
+  const recentEl=$('dash-recent-table');
+  const recentTrades=[...data.trades].filter(t=>t.type==='sell'&&t.pnlGBP!=null)
+    .sort((a,b)=>{ function n(t){const dt=t.datetime||t.date+'T00:00';return dt.replace(/T(\d):/,'T0$1:');} return n(b)>n(a)?1:n(b)<n(a)?-1:0; })
+    .slice(0,5);
+  if(!recentTrades.length){recentEl.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">No closed trades yet</div>';}
+  else {
+    recentEl.innerHTML=`<table><thead><tr><th>Date</th><th>Asset</th><th>Broker</th><th style="text-align:right;">P&L</th></tr></thead><tbody>
+      ${recentTrades.map(t=>`<tr><td style="font-size:11px;color:var(--text3);">${t.date}</td><td><strong>${t.asset}</strong></td><td>${brokerTag(t.broker)}</td><td class="mono" style="text-align:right;color:${t.pnlGBP>=0?'var(--green)':'var(--red)'};">${t.pnlGBP>=0?'+':''}${gbp(t.pnlGBP)}</td></tr>`).join('')}
+    </tbody></table>`;
+  }
 
   // broker alloc
   const bt=brokerTotals(), btTotal=Object.values(bt).reduce((s,v)=>s+v,0);
@@ -2380,19 +2390,6 @@ function renderPositions() {
   else if(posFilterMode==='long')pos=all.filter(p=>p.side==='Long');
   else if(posFilterMode==='short')pos=all.filter(p=>p.side==='Short');
   else pos=all;
-  // Filter out dust positions below £10 (use market value if available, cost basis as fallback)
-  const usdgbp_=livePrices['__USDGBP__']||0.79;
-  pos=pos.filter(p=>{
-    const lp=livePrices[p.asset];
-    if(lp?.price){
-      let mv=0;
-      if(p.class==='Crypto') mv=p.totalQty*lp.price*usdgbp_;
-      else if(lp.currency==='GBP') mv=p.totalQty*lp.price;
-      else mv=p.totalQty*lp.price*usdgbp_;
-      return mv>=10;
-    }
-    return p.totalCostGBP>=10;
-  });
   if(brokerFilter) pos=pos.filter(p=>normBroker(p.broker)===brokerFilter);
   if(searchVal) pos=pos.filter(p=>(p.asset||'').toLowerCase().includes(searchVal)||(p.broker||'').toLowerCase().includes(searchVal));
   // Sort
@@ -2403,12 +2400,11 @@ function renderPositions() {
   else if(sortVal==='date_asc') pos.sort((a,b)=>new Date(a.since)-new Date(b.since));
   $('pos-sub').textContent=`${pos.length} positions · ${gbp(pos.reduce((s,p)=>s+p.totalCostGBP,0))} cost basis`;
 
-  // Summary cards
+  // Summary cards — include ALL positions including HL
   const usdgbp=livePrices['__USDGBP__']||0.79;
-  let totalCost=0,totalMarket=0,hlCost=0,posWithPrice=0,unrealTotal=0;
+  let totalCost=0,totalMarket=0,posWithPrice=0,unrealTotal=0;
   pos.forEach(p=>{
     totalCost+=p.totalCostGBP;
-    if(isHL(p.broker)){hlCost+=p.totalCostGBP;return;}
     const lp=livePrices[p.asset];
     if(lp?.price){
       let mv=0;
@@ -2417,7 +2413,6 @@ function renderPositions() {
       else mv=p.totalQty*lp.price*usdgbp;
       totalMarket+=mv;
       posWithPrice++;
-      // Correct direction for long vs short
       unrealTotal += p.side==='Short' ? p.totalCostGBP - mv : mv - p.totalCostGBP;
     }
   });
@@ -2438,12 +2433,12 @@ function renderPositions() {
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;">
         <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Unrealised P&amp;L</div>
         <div style="font-size:20px;font-weight:600;font-family:var(--mono);" class="${hasLive?(unrealTotal>=0?'pos':'neg'):''}">${hasLive?(unrealTotal>=0?'+':'')+gbp(unrealTotal):'—'}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px;">excl. HL positions</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;">${hasLive?`${posWithPrice} positions with live price`:'Click Refresh Prices'}</div>
       </div>
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;">
-        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">HL (ISA) Cost Basis</div>
-        <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:var(--text);">${gbp(hlCost)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px;">no live prices available</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Realised P&amp;L</div>
+        <div style="font-size:20px;font-weight:600;font-family:var(--mono);" class="${realisedFiltered()>=0?'pos':'neg'}">${realisedFiltered()>=0?'+':''}${gbp(realisedFiltered())}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;">selected period</div>
       </div>`;
   }
   const wrap=$('pos-table-wrap');
