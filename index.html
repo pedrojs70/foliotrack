@@ -2323,7 +2323,7 @@ function renderDashboard() {
   else {
     gainersEl.innerHTML=`<table><thead><tr><th>Asset</th><th style="text-align:right;">P&L</th></tr></thead><tbody>
       <tr><td colspan="2" style="font-size:11px;color:var(--text3);padding:8px 12px 4px;font-weight:600;">TOP GAINERS</td></tr>
-      ${top3.map(([a,d])=>`<tr><td><strong>${a}</strong></td><td class="mono" style="text-align:right;color:${d.pnl>=0?'var(--green)':'var(--red)'};">${d.pnl>=0?'+':''}${gbp(d.pnl)}</td></tr>`).join('')}
+      ${top3.map(([a,d])=>`<tr><td><strong>${a}</strong></td><td class="mono" style="text-align:right;color:${d.pnl>=0?'var(--green)':'var(--red)'};">${gbp(d.pnl)}</td></tr>`).join('')}
       <tr><td colspan="2" style="font-size:11px;color:var(--text3);padding:8px 12px 4px;font-weight:600;">TOP LOSERS</td></tr>
       ${bot3.filter(([a])=>!top3.find(([b])=>b===a)).map(([a,d])=>`<tr><td><strong>${a}</strong></td><td class="mono" style="text-align:right;color:var(--red);">${gbp(d.pnl)}</td></tr>`).join('')}
     </tbody></table>`;
@@ -2337,7 +2337,7 @@ function renderDashboard() {
   if(!recentTrades.length){recentEl.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">No closed trades yet</div>';}
   else {
     recentEl.innerHTML=`<table><thead><tr><th>Date</th><th>Asset</th><th>Broker</th><th style="text-align:right;">P&L</th></tr></thead><tbody>
-      ${recentTrades.map(t=>`<tr><td style="font-size:11px;color:var(--text3);">${t.date}</td><td><strong>${t.asset}</strong></td><td>${brokerTag(t.broker)}</td><td class="mono" style="text-align:right;color:${t.pnlGBP>=0?'var(--green)':'var(--red)'};">${t.pnlGBP>=0?'+':''}${gbp(t.pnlGBP)}</td></tr>`).join('')}
+      ${recentTrades.map(t=>`<tr><td style="font-size:11px;color:var(--text3);">${t.date}</td><td><strong>${t.asset}</strong></td><td>${brokerTag(t.broker)}</td><td class="mono" style="text-align:right;color:${t.pnlGBP>=0?'var(--green)':'var(--red)'};">${gbp(t.pnlGBP)}</td></tr>`).join('')}
     </tbody></table>`;
   }
 
@@ -2481,7 +2481,7 @@ function renderPositions() {
         : marketValGBP - p.totalCostGBP;
       livePriceCell = `<span class="mono">${livePriceDisplay}</span>`;
       marketValCell = `<span class="mono">${gbp(marketValGBP)}</span>`;
-      unrealCell = `<span class="mono ${unrealPnl>=0?'pos':'neg'}">${unrealPnl>=0?'+':''}${gbp(unrealPnl)}</span>`;
+      unrealCell = `<span class="mono ${unrealPnl>=0?'pos':'neg'}">${gbp(unrealPnl)}</span>`;
     }
 
     const tags=(p.tags||[]).map(t=>`<span class="tag-pill">${t}</span>`).join('');
@@ -2541,8 +2541,8 @@ function renderTrades() {
 
   wrap.innerHTML=`<table><thead><tr><th></th><th>Date</th><th>Type</th><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty</th><th>Price (orig)</th><th>FX</th><th>Value (orig)</th><th>Value (GBP)</th><th>Fees (GBP)</th><th>P&L</th><th>Tags</th><th>SL/TP</th><th></th></tr></thead><tbody>${paginated.map(t=>{
     const isBuy=t.type==='buy';
-    const pnlCell=t.pnlGBP!=null?`<span class="${t.pnlGBP>=0?'pos':'neg'}">${t.pnlGBP>=0?'':'-'}${gbp(t.pnlGBP)}</span>`:'<span style="color:var(--text3);">—</span>';
-    const origPrice=t.price?`${t.currency==='GBP'?'£':t.currency==='USDT'||t.currency==='USD'?'$':'€'}${t.price.toFixed(4)}`:'—';
+    const pnlCell=t.pnlGBP!=null?`<span class="${t.pnlGBP>=0?'pos':'neg'}">${gbp(t.pnlGBP)}</span>`:'<span style="color:var(--text3);">—</span>';
+    const origPrice=t.price?`${t.currency==='GBP'?'£':t.currency==='USDT'||t.currency==='USD'?'$':'€'}${t.price.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'—';
     const tags=(t.tags||[]).map(tg=>`<span class="tag-pill">${tg}</span>`).join('');
     const sltp=(t.sl||t.tp)?`<span style="font-size:11px;color:var(--text3);">${t.sl?'SL:'+t.sl:''}${t.sl&&t.tp?' ':''}${t.tp?'TP:'+t.tp:''}</span>`:'—';
     const sel=selectedTradeIds.has(t.id)?'selected':'';
@@ -3279,7 +3279,7 @@ function $(id){return document.getElementById(id);}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
 function today(){return new Date().toISOString().split('T')[0];}
 function gbp(n){return'£'+(Math.abs(n||0)).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});}
-function qty(n){return n>=1?n.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:4}):(n||0).toFixed(6);}
+function qty(n){return(n||0).toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:2});}
 function emptyState(title,sub=''){return`<div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-title">${title}</div>${sub?`<div class="empty-sub">${sub}</div>`:''}</div>`;}
 function classBadge(c){return`<span class="badge ${c==='Crypto'?'badge-amber':'badge-blue'}" style="font-size:10px;padding:1px 5px;">${c==='Crypto'?'Crypto':'ETF'}</span>`;}
 function brokerTag(b){const display=normBroker(b||'');const k=display.toLowerCase().replace(/\s/g,'').replace(/\./g,'');return`<span class="broker-tag bt-${k}">${display}</span>`;}
