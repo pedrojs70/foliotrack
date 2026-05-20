@@ -23,6 +23,17 @@
   --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
   --sidebar-w:62px;
 }
+[data-theme="carbon"] {
+  --bg:#0d0f14;--bg2:#161a24;--bg3:#1c2130;--bg4:#222840;--bg5:#2a3050;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.10);
+  --text:#e8eaf0;--text2:#9aa5bb;--text3:#5a6478;
+  --accent:#60a5fa;--accent2:#3b82f6;--accent-dim:rgba(96,165,250,0.12);--accent-dim2:rgba(96,165,250,0.06);
+  --red:#f87171;--red-dim:rgba(248,113,113,0.12);
+  --green:#34d399;--green-dim:rgba(52,211,153,0.12);
+  --amber:#fbbf24;--amber-dim:rgba(251,191,36,0.12);
+  --blue:#60a5fa;--blue-dim:rgba(96,165,250,0.12);
+  --purple:#a78bfa;--purple-dim:rgba(167,139,250,0.12);
+}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;min-height:100vh;overflow-x:hidden;}
 ::-webkit-scrollbar{width:4px;height:4px;}
@@ -467,7 +478,15 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--accent),transparent);"></div><div class="metric-label">Total Cost Basis</div><div class="metric-value" id="m-total">£0</div><div class="metric-sub neu" id="m-total-sub">no trades yet</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--blue),transparent);"></div><div class="metric-label">Open Positions</div><div class="metric-value" id="m-positions">0</div><div class="metric-sub neu" id="m-positions-sub">0 brokers</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--purple),transparent);"></div><div class="metric-label">Realised P&amp;L</div><div class="metric-value" id="m-realised">£0</div><div class="metric-sub neu" id="m-realised-sub">0 closed</div></div>
-          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--amber),transparent);"></div><div class="metric-label">Total Fees</div><div class="metric-value" id="m-fees">£0</div><div class="metric-sub neu">all brokers</div></div>
+          <div class="metric" style="cursor:pointer;" onclick="toggleTheme()" title="Mudar tema">
+            <div class="metric-bar" style="background:linear-gradient(90deg,var(--amber),transparent);"></div>
+            <div class="metric-label">Total Fees</div>
+            <div class="metric-value" id="m-fees">£0</div>
+            <div class="metric-sub neu" style="display:flex;align-items:center;gap:4px;">
+              <span id="theme-label">☀ Light</span>
+              <span style="color:var(--text3);font-size:10px;">· click to toggle</span>
+            </div>
+          </div>
         </div>
         <div class="grid2">
           <div class="card">
@@ -489,8 +508,8 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
     <!-- POSITIONS -->
     <div id="view-positions" class="view">
       <div class="content">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-          <div class="tabs"><div class="tab active" onclick="filterPos('all',this)">All</div><div class="tab" onclick="filterPos('stocks',this)">Stocks &amp; ETFs</div><div class="tab" onclick="filterPos('crypto',this)">Crypto</div><div class="tab" onclick="filterPos('long',this)">Long</div><div class="tab" onclick="filterPos('short',this)">Short</div></div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+          <div class="tabs" style="margin-bottom:0;"><div class="tab active" onclick="filterPos('all',this)">All</div><div class="tab" onclick="filterPos('stocks',this)">Stocks &amp; ETFs</div><div class="tab" onclick="filterPos('crypto',this)">Crypto</div><div class="tab" onclick="filterPos('long',this)">Long</div><div class="tab" onclick="filterPos('short',this)">Short</div></div>
           <select id="pos-broker-filter" onchange="renderPositions()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;">
             <option value="">All Brokers</option>
             <option value="IBKR">IBKR</option>
@@ -3265,6 +3284,32 @@ function togglePnlSort() {
   renderPnL();
 }
 
+function toggleTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'carbon';
+  if(isDark) {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('foliotrack-theme', 'light');
+    const el = document.getElementById('theme-label');
+    if(el) el.textContent = '☀ Light';
+  } else {
+    document.documentElement.setAttribute('data-theme', 'carbon');
+    localStorage.setItem('foliotrack-theme', 'carbon');
+    const el = document.getElementById('theme-label');
+    if(el) el.textContent = '🌙 Carbon';
+  }
+}
+
+(function(){
+  const saved = localStorage.getItem('foliotrack-theme');
+  if(saved === 'carbon') {
+    document.documentElement.setAttribute('data-theme', 'carbon');
+    window.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('theme-label');
+      if(el) el.textContent = '🌙 Carbon';
+    });
+  }
+})();
+
 function filterPos(f,el){posFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPositions();}
 function filterTrades(f,el){tradeFilterMode=f;tradesPage=1;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTrades();}
 function filterTradesSubclass(f,el){tradeSubclassFilter=f;tradesPage=1;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTrades();}
@@ -3475,10 +3520,12 @@ async function refreshLivePrices() {
       const d=await res.json();
       if(d.rates?.GBP) livePrices['__USDGBP__']=d.rates.GBP;
       if(d.rates?.GBP && d.rates?.EUR) livePrices['__EURGBP__']=d.rates.GBP/d.rates.EUR;
+      if(d.rates?.GBP && d.rates?.AUD) livePrices['__AUDGBP__']=d.rates.GBP/d.rates.AUD;
     }
   } catch(e){}
   if(!livePrices['__USDGBP__']) livePrices['__USDGBP__']=0.79;
   if(!livePrices['__EURGBP__']) livePrices['__EURGBP__']=0.86;
+  if(!livePrices['__AUDGBP__']) livePrices['__AUDGBP__']=0.53;
 
   let fetched=0;
 
@@ -3619,7 +3666,7 @@ async function refreshLivePrices() {
         let gbpPrice = price;
         if(cur === 'EUR') gbpPrice = price * (livePrices['__EURGBP__'] || 0.86);
         else if(cur === 'USD') gbpPrice = price * (livePrices['__USDGBP__'] || 0.79);
-        else if(cur === 'AUD') gbpPrice = price * 0.50;
+        else if(cur === 'AUD') gbpPrice = price * (livePrices['__AUDGBP__'] || 0.53);
         livePrices[p.asset]={price:gbpPrice, rawPrice:price, source:'yahoo', currency:'GBP'};
         fetched++;
       }
