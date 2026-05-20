@@ -3616,6 +3616,7 @@ async function refreshLivePrices() {
         const cur = mapped.currency;
         let gbpPrice = price;
         if(cur === 'EUR') gbpPrice = price * (livePrices['__EURGBP__'] || 0.86);
+        else if(cur === 'USD') gbpPrice = price * (livePrices['__USDGBP__'] || 0.79);
         else if(cur === 'AUD') gbpPrice = price * 0.50;
         livePrices[p.asset]={price:gbpPrice, rawPrice:price, source:'yahoo', currency:'GBP'};
         fetched++;
