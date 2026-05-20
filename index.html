@@ -1284,6 +1284,12 @@ function parseHL(text) {
     const qty=Math.abs(parseFloat(qtyStr.replace(/,/g,''))||0);
     if(!qty) continue;
 
+    // Calculate fees from Value column — fees = abs(Value) - qty × priceGBP
+    const valueStr=(cols[6]||'').trim();
+    const valueRaw=Math.abs(parseFloat(valueStr.replace(/[£,\s]/g,''))||0);
+    const calcValue=+(qty*priceGBP).toFixed(2);
+    const feesGBP=valueRaw>0?+Math.max(0,valueRaw-calcValue).toFixed(2):0;
+
     const date=parseDateDMY(dateStr);
     // Remove "qty @ price" suffix to get clean name — keep FULL name, no truncation
     const cleanDesc=desc.replace(/\s+[\d,]+\.?\d*\s*@.*/,'').trim();
@@ -1298,7 +1304,7 @@ function parseHL(text) {
       broker:'Hargreaves Lansdown',date,qty,
       price:priceGBP,currency:'GBP',
       priceGBP,valueGBP:+(qty*priceGBP).toFixed(2),fxRate:1,
-      side:'Long',leverage:1,fees:0,feesGBP:0,
+      side:'Long',leverage:1,fees:feesGBP,feesGBP,
       class:'Stock/ETF',notes:'',tags:[],
       sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null
     });
