@@ -907,7 +907,7 @@ const db = firebase.firestore();
 // ============================================================
 let portfolios = [{ id: 'main', name: 'Main Portfolio' }];
 let currentPortfolioId = 'main';
-let data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[] };
+let data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[], dismissedDivWarnings:[] };
 let selectedTradeIds = new Set();
 let pendingBroker = null;
 let tradeFilterMode = 'all';
@@ -973,6 +973,7 @@ async function loadPortfolio(id) {
     data.fxRates = d.fxRates || {};
     data.pendingMatches = d.pendingMatches || [];
     data.resetPositions = d.resetPositions || [];
+    data.dismissedDivWarnings = d.dismissedDivWarnings || [];
 
     const totalChunks = d.tradeChunks || 0;
 
@@ -1019,7 +1020,7 @@ async function loadPortfolio(id) {
       data.trades = [];
     }
   } else {
-    data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[] };
+    data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[], dismissedDivWarnings:[] };
   }
 }
 
@@ -2595,6 +2596,14 @@ function setTradesPage(page) {
   if(wrap) wrap.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+function dismissDivWarning(key) {
+  if(!data.dismissedDivWarnings) data.dismissedDivWarnings=[];
+  if(!data.dismissedDivWarnings.includes(key)) data.dismissedDivWarnings.push(key);
+  save();
+  renderDividends();
+  toast('Aviso dispensado');
+}
+
 function renderDividends() {
   const fyStart=new Date('2025-04-06'),fyEnd=new Date('2026-04-05');
   const fyDivs=data.dividends.filter(d=>{const dt=new Date(d.date);return dt>=fyStart&&dt<=fyEnd;});
@@ -2606,8 +2615,38 @@ function renderDividends() {
   $('div-net').textContent=gbp(netTotal);
   const wrap=$('div-table-wrap');
   if(!data.dividends.length){wrap.innerHTML=emptyState('No dividends yet','Dividends from IBKR and HL CSVs are detected automatically on import.');return;}
+
+  // Detect possible reversals — same asset, same date, multiple entries
+  const dismissed = data.dismissedDivWarnings||[];
+  const groups={};
+  data.dividends.forEach(d=>{
+    const key=`${d.asset}__${d.date}`;
+    if(!groups[key]) groups[key]=[];
+    groups[key].push(d);
+  });
+  const suspicious=Object.entries(groups).filter(([key,divs])=>{
+    if(divs.length<2) return false;
+    if(dismissed.includes(key)) return false;
+    return true;
+  });
+
+  let warningHtml='';
+  if(suspicious.length){
+    const items=suspicious.map(([key,divs])=>{
+      const [asset,date]=key.split('__');
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(217,119,6,0.15);">
+        <span style="font-size:13px;"><strong>${asset}</strong> · ${date} · ${divs.length} entradas — verifica se há reversões</span>
+        <button class="btn btn-sm" style="font-size:11px;padding:2px 8px;background:var(--amber-dim);border-color:var(--amber);color:var(--amber);" onclick="dismissDivWarning('${key}')">Dispensar</button>
+      </div>`;
+    }).join('');
+    warningHtml=`<div style="background:var(--amber-dim);border:1px solid rgba(217,119,6,0.2);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:600;color:var(--amber);margin-bottom:6px;">⚠ Possíveis reversões de dividendos detectadas</div>
+      ${items}
+    </div>`;
+  }
+
   const rows=[...data.dividends].sort((a,b)=>new Date(b.datetime||b.date)-new Date(a.datetime||a.date)).map(d=>`<tr><td style="font-size:12px;color:var(--text3);">${d.date}</td><td><strong>${d.asset}</strong></td><td>${brokerTag(d.broker)}</td><td class="mono">${d.currency} ${(d.gross||0).toFixed(2)}</td><td class="mono" style="color:var(--red);">-${(d.wht||0).toFixed(2)}</td><td class="mono pos">${gbp(d.valueGBP||d.gross||0)}</td><td><button class="btn btn-danger btn-sm" onclick="delDividend('${d.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`).join('');
-  wrap.innerHTML=`<table><thead><tr><th>Date</th><th>Asset</th><th>Broker</th><th>Gross (orig)</th><th>WHT</th><th>Net (GBP)</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  wrap.innerHTML=warningHtml+`<table><thead><tr><th>Date</th><th>Asset</th><th>Broker</th><th>Gross (orig)</th><th>WHT</th><th>Net (GBP)</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderPnL() {
