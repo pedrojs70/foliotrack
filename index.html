@@ -3009,7 +3009,8 @@ let lastClickedImport = null;
 let lastClickedSnapshot = null;
 let lastClickedReset = null;
 
-function toggleSelectImport(id, e, allIds) {
+function toggleSelectImport(id, e) {
+  const allIds=[...document.querySelectorAll('[data-import-id]')].map(el=>el.dataset.importId);
   if(e.shiftKey && lastClickedImport) {
     const i1=allIds.indexOf(lastClickedImport), i2=allIds.indexOf(id);
     const [a,b]=[Math.min(i1,i2),Math.max(i1,i2)];
@@ -3022,7 +3023,8 @@ function toggleSelectImport(id, e, allIds) {
   lastClickedImport=id; renderImportHistory();
 }
 
-function toggleSelectSnapshot(id, e, allIds) {
+function toggleSelectSnapshot(id, e) {
+  const allIds=[...document.querySelectorAll('[data-snapshot-id]')].map(el=>el.dataset.snapshotId);
   if(e.shiftKey && lastClickedSnapshot) {
     const i1=allIds.indexOf(lastClickedSnapshot), i2=allIds.indexOf(id);
     const [a,b]=[Math.min(i1,i2),Math.max(i1,i2)];
@@ -3035,7 +3037,8 @@ function toggleSelectSnapshot(id, e, allIds) {
   lastClickedSnapshot=id; renderSnapshots();
 }
 
-function toggleSelectReset(key, e, allKeys) {
+function toggleSelectReset(key, e) {
+  const allKeys=[...document.querySelectorAll('[data-reset-key]')].map(el=>el.dataset.resetKey);
   if(e.shiftKey && lastClickedReset) {
     const i1=allKeys.indexOf(lastClickedReset), i2=allKeys.indexOf(key);
     const [a,b]=[Math.min(i1,i2),Math.max(i1,i2)];
@@ -3082,14 +3085,13 @@ function renderResetPositions() {
     c.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">Nenhum reset activo</div>';
     return;
   }
-  const allKeys=data.resetPositions.map(r=>`${r.asset}__${r.broker}`);
   const selBar=selectedResets.size?`<div style="padding:6px 16px;display:flex;align-items:center;gap:8px;background:var(--accent-dim);border-bottom:1px solid var(--border);"><span style="font-size:12px;">${selectedResets.size} seleccionado(s)</span><button class="btn btn-danger btn-sm" onclick="deleteSelectedResets()">Eliminar seleccionados</button></div>`:'';
   c.innerHTML=selBar+data.resetPositions.map(r=>{
     const key=`${r.asset}__${r.broker}`;
     const sel=selectedResets.has(key);
-    return `<div onclick="toggleSelectReset('${key}',event,${JSON.stringify(allKeys)})" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;background:${sel?'var(--accent-dim)':''};">
+    return `<div data-reset-key="${key}" onclick="toggleSelectReset('${key}',event)" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;background:${sel?'var(--accent-dim)':''};">
       <div style="display:flex;align-items:center;gap:10px;">
-        <input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation();toggleSelectReset('${key}',event,${JSON.stringify(allKeys)})" style="cursor:pointer;">
+        <input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation();toggleSelectReset('${key}',event)" style="cursor:pointer;">
         <div>
           <span style="font-weight:600;font-size:13px;">${r.asset}</span>
           <span style="font-size:12px;color:var(--text3);margin-left:8px;">${r.broker}</span>
@@ -3111,8 +3113,8 @@ function renderImportHistory() {
   const selBar=selectedImports.size?`<div style="padding:6px 16px;display:flex;align-items:center;gap:8px;background:var(--accent-dim);border-bottom:1px solid var(--border);"><span style="font-size:12px;">${selectedImports.size} seleccionado(s)</span><button class="btn btn-danger btn-sm" onclick="deleteSelectedImports()">Eliminar seleccionados</button></div>`:'';
   el.innerHTML=selBar+[...data.imports].reverse().map(imp=>{
     const sel=selectedImports.has(imp.id);
-    return `<div onclick="toggleSelectImport('${imp.id}',event,${JSON.stringify(allIds)})" style="background:${sel?'var(--accent-dim)':'var(--bg3)'};border:1px solid var(--border);border-radius:var(--radius);padding:10px 13px;display:flex;align-items:center;gap:10px;margin:4px 8px;cursor:pointer;">
-      <input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation();toggleSelectImport('${imp.id}',event,${JSON.stringify(allIds)})" style="cursor:pointer;">
+    return `<div data-import-id="${imp.id}" onclick="toggleSelectImport('${imp.id}',event)" style="background:${sel?'var(--accent-dim)':'var(--bg3)'};border:1px solid var(--border);border-radius:var(--radius);padding:10px 13px;display:flex;align-items:center;gap:10px;margin:4px 8px;cursor:pointer;">
+      <input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation();toggleSelectImport('${imp.id}',event)" style="cursor:pointer;">
       <div style="flex:1;"><div style="font-size:13px;font-weight:500;">${imp.filename}</div><div style="font-size:11px;color:var(--text3);margin-top:2px;">${imp.date} · ${imp.broker} · ${imp.trades} trades${imp.dividends?' · '+imp.dividends+' divs':''}</div></div>
       <span class="badge badge-green">Done</span>
       <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteImport('${imp.id}')">Delete</button>
@@ -3127,8 +3129,8 @@ function renderSnapshots() {
   const selBar=selectedSnapshots.size?`<div style="padding:6px 16px;display:flex;align-items:center;gap:8px;background:var(--accent-dim);border-bottom:1px solid var(--border);"><span style="font-size:12px;">${selectedSnapshots.size} seleccionado(s)</span><button class="btn btn-danger btn-sm" onclick="deleteSelectedSnapshots()">Eliminar seleccionados</button></div>`:'';
   el.innerHTML=selBar+[...data.snapshots].reverse().map(s=>{
     const sel=selectedSnapshots.has(s.id);
-    return `<div onclick="toggleSelectSnapshot('${s.id}',event,${JSON.stringify(allIds)})" class="backup-item" style="cursor:pointer;background:${sel?'var(--accent-dim)':''};">
-      <input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation();toggleSelectSnapshot('${s.id}',event,${JSON.stringify(allIds)})" style="cursor:pointer;margin-right:4px;">
+    return `<div data-snapshot-id="${s.id}" onclick="toggleSelectSnapshot('${s.id}',event)" class="backup-item" style="cursor:pointer;background:${sel?'var(--accent-dim)':''};">
+      <input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation();toggleSelectSnapshot('${s.id}',event)" style="cursor:pointer;margin-right:4px;">
       <div class="backup-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
       <div class="backup-info"><div class="backup-title">${s.label}</div><div class="backup-sub">${s.date} · ${s.count} trades</div></div>
       <div style="display:flex;gap:6px;" onclick="event.stopPropagation()"><button class="btn btn-secondary btn-sm" onclick="restoreSnap('${s.id}')">Restore</button><button class="btn btn-secondary btn-sm" onclick="dlSnap('${s.id}')">↓</button><button class="btn btn-danger btn-sm" onclick="deleteSnap('${s.id}')">✕</button></div>
