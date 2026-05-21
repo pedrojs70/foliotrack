@@ -81,6 +81,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .sync-status{width:42px;height:42px;display:flex;align-items:center;justify-content:center;}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;}
 .sync-dot.syncing{background:var(--amber);animation:pulse 1s infinite;}
+.sync-dot.unsaved{background:var(--amber);}
 .sync-dot.error{background:var(--red);}
 
 /* MAIN */
@@ -433,6 +434,9 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
       </div>
       <div class="sync-status">
         <div class="sync-dot" id="sync-dot"></div>
+      </div>
+      <div style="padding:8px 6px 0;">
+        <button id="manual-save-btn" onclick="manualSave()" style="width:100%;padding:7px 4px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:11px;font-family:var(--font);cursor:pointer;font-weight:500;transition:all 0.2s;">💾 Guardar</button>
       </div>
     </div>
   </aside>
@@ -1024,6 +1028,44 @@ async function loadPortfolio(id) {
   }
 }
 
+let _unsaved = false;
+
+function markUnsaved() {
+  _unsaved = true;
+  sync('unsaved', '● Não guardado');
+  const btn = $('manual-save-btn');
+  if(btn) { btn.style.background='var(--amber)'; btn.style.color='#fff'; btn.textContent='💾 Guardar'; }
+}
+
+function markSaved() {
+  _unsaved = false;
+  sync('ok', 'Guardado');
+  const btn = $('manual-save-btn');
+  if(btn) { btn.style.background=''; btn.style.color=''; btn.textContent='💾 Guardado'; }
+  setTimeout(()=>{ sync('ok','Ligado'); if(btn) btn.textContent='💾 Guardar'; }, 2000);
+}
+
+async function manualSave() {
+  if(!_unsaved) { toast('Sem alterações para guardar','info'); return; }
+  // Ask if user wants a snapshot first
+  const snap = confirm('Criar snapshot antes de guardar?\n\nRecomendado se fizeste alterações importantes.');
+  if(snap) {
+    const label = `Antes de guardar · ${new Date().toLocaleString('pt-PT')}`;
+    await snapshot(label);
+  }
+  await save();
+  markSaved();
+}
+
+// Warn before closing with unsaved changes
+window.addEventListener('beforeunload', (e) => {
+  if(_unsaved) {
+    e.preventDefault();
+    e.returnValue = 'Tens alterações não guardadas. Tens a certeza que queres sair?';
+    return e.returnValue;
+  }
+});
+
 async function save() {
   sync('syncing','Saving...');
   try {
@@ -1051,18 +1093,20 @@ async function save() {
       fxRates: data.fxRates,
       pendingMatches: data.pendingMatches,
       resetPositions: data.resetPositions||[],
+      dismissedDivWarnings: data.dismissedDivWarnings||[],
       updatedAt: new Date().toISOString()
     });
     await db.collection('foliotrack').doc('portfolios').set({ list: portfolios });
     sync('ok','Saved');
-    setTimeout(()=>sync('ok','Connected'),2000);
+    markSaved();
+    setTimeout(()=>sync('ok','Ligado'),2000);
   } catch(e) { sync('error','Save failed'); toast('Save failed: '+e.message,'error'); console.error('[save] error:', e); }
 }
 
 function sync(state, text) {
   const dot = $('sync-dot'), txt = $('sync-text');
   if(!dot) return;
-  dot.className = 'sync-dot' + (state==='syncing'?' syncing':state==='error'?' error':'');
+  dot.className = 'sync-dot' + (state==='syncing'?' syncing':state==='error'?' error':state==='unsaved'?' unsaved':'');
   if(txt) txt.textContent = text;
 }
 
@@ -1885,7 +1929,7 @@ async function processFile(file, hint) {
 
   // Auto-match all sells
   autoMatchAll();
-  await save();
+  markUnsaved();
   renderAll();
   const msg = skipped>0||skippedDiv>0
     ? `✓ ${newTrades.length} trades, ${newDividends.length} dividends imported · ${skipped+skippedDiv} duplicates skipped`
@@ -2090,7 +2134,7 @@ async function confirmAll() {
     }
   }
   data.pendingMatches=[];
-  await save();
+  markUnsaved();
   renderAll();
   toast(`✓ ${pending.length} trades confirmed with Share Pool`,'success');
 }
@@ -2114,7 +2158,7 @@ function confirmMatch(sellId, val) {
     if(buy){sell.costBasisGBP=+((buy.priceGBP||buy.price)*sell.qty).toFixed(2);sell.pnlGBP=+((sell.valueGBP||0)-sell.costBasisGBP).toFixed(2);sell.matchedTo=val;}
   }
   data.pendingMatches=data.pendingMatches.filter(id=>id!==sellId);
-  save();renderAll();toast('Match confirmed ✓','success');
+  markUnsaved();renderAll();toast('Match confirmed ✓','success');
 }
 
 // ============================================================
@@ -2605,7 +2649,7 @@ function setTradesPage(page) {
 function dismissDivWarning(key) {
   if(!data.dismissedDivWarnings) data.dismissedDivWarnings=[];
   if(!data.dismissedDivWarnings.includes(key)) data.dismissedDivWarnings.push(key);
-  save();
+  markUnsaved();
   renderDividends();
   toast('Aviso dispensado');
 }
@@ -3039,7 +3083,7 @@ async function saveTrade() {
   function _normDT(t){ const dt=t.datetime||t.date+'T00:00'; return dt.replace(/T(\d):/,'T0$1:'); }
   data.trades.sort((a,b)=>_normDT(a)>_normDT(b)?1:_normDT(a)<_normDT(b)?-1:0);
   if(trade.type==='sell'){data.pendingMatches.push(trade.id);}
-  await save();renderAll();closeModal('modal-trade');
+  markUnsaved();renderAll();closeModal('modal-trade');
   toast(`Added: ${trade.type.toUpperCase()} ${qty(qty_)} ${asset}`,'success');
 }
 
@@ -3053,7 +3097,7 @@ async function saveDividend() {
   const fxRate=await fx(currency,date);
   const valueGBP=+((gross-wht)*fxRate).toFixed(2);
   data.dividends.push({id:genId(),asset,date,gross,wht,currency,broker:$('d-broker').value,valueGBP,fxRate});
-  await save();renderAll();closeModal('modal-dividend');
+  markUnsaved();renderAll();closeModal('modal-dividend');
   toast('Dividend added ✓','success');
 }
 
@@ -3076,7 +3120,7 @@ async function deleteSelectedTrades() {
   selectedTradeIds.clear();
   lastSelectedTradeIdx=-1;
   autoMatchAll();
-  await save();
+  markUnsaved();
   renderAll();
   toast(`${count} trade${count>1?'s':''} deleted — Ctrl+Z to undo`,'info');
 }
@@ -3097,14 +3141,14 @@ async function delTrade(id) {
   data.trades = data.trades.filter(t=>t.id!==id);
   data.pendingMatches = data.pendingMatches.filter(m=>m!==id);
   autoMatchAll();
-  await save(); renderAll();
+  markUnsaved(); renderAll();
   toast('Trade deleted — Ctrl+Z to undo','info');
 }
 
 async function delDividend(id) {
   if(!confirm('Delete this dividend?'))return;
   data.dividends=data.dividends.filter(d=>d.id!==id);
-  await save();renderAll();toast('Dividend deleted','info');
+  markUnsaved();renderAll();toast('Dividend deleted','info');
 }
 
 async function deleteImport(id) {
@@ -3112,7 +3156,7 @@ async function deleteImport(id) {
   if(!imp||!confirm(`Delete import "${imp.filename}"?`))return;
   await snapshot(`Before deleting: ${imp.filename}`);
   data.imports=data.imports.filter(i=>i.id!==id);
-  await save();renderAll();toast('Import deleted. Restore via Backups if needed.','info');
+  markUnsaved();renderAll();toast('Import deleted. Restore via Backups if needed.','info');
 }
 
 // PAIRS
@@ -3170,7 +3214,7 @@ async function savePair() {
   selectedTradeIds.forEach(id=>{const t=data.trades.find(x=>x.id===id);if(t)t.pairId=pairId;});
   selectedTradeIds.clear();
   updatePairBtn();
-  await save();renderAll();closeModal('modal-pair');
+  markUnsaved();renderAll();closeModal('modal-pair');
   toast(`Pair "${name}" created ✓`,'success');
 }
 
@@ -3178,7 +3222,7 @@ async function deletePair(id) {
   if(!confirm('Delete this pair? Trades will remain but pair link is removed.'))return;
   data.trades.forEach(t=>{if(t.pairId===id)t.pairId=null;});
   data.pairs=data.pairs.filter(p=>p.id!==id);
-  await save();renderAll();toast('Pair deleted','info');
+  markUnsaved();renderAll();toast('Pair deleted','info');
 }
 
 function getPairName(pairId) {
@@ -3225,7 +3269,7 @@ async function dlSnap(id) {
 async function deleteSnap(id) {
   if(!confirm('Delete this snapshot? This cannot be undone.')) return;
   data.snapshots=data.snapshots.filter(s=>s.id!==id);
-  await save();
+  markUnsaved();
   // Also delete the separate snapshot document
   db.collection('foliotrack').doc(`snapshot_${id}`).delete().catch(()=>{});
   renderSnapshots();
@@ -3317,7 +3361,7 @@ function resetPosition(asset, broker) {
   const now = new Date().toISOString(); // full datetime
   data.resetPositions = data.resetPositions.filter(r=>!(r.asset===asset&&r.broker===broker));
   data.resetPositions.push({asset, broker, resetDate: now.split('T')[0], resetDatetime: now});
-  save();
+  markUnsaved();
   renderPositions();
   renderResetPositions();
   toast(`Posição ${asset} resetada`);
@@ -3325,7 +3369,7 @@ function resetPosition(asset, broker) {
 
 function unresetPosition(asset, broker) {
   data.resetPositions = data.resetPositions.filter(r=>!(r.asset===asset&&r.broker===broker));
-  save();
+  markUnsaved();
   renderPositions();
   renderResetPositions();
   toast(`Reset de ${asset} anulado`);
@@ -3333,7 +3377,7 @@ function unresetPosition(asset, broker) {
 
 function removeReset(asset, broker) {
   data.resetPositions = data.resetPositions.filter(r=>!(r.asset===asset&&r.broker===broker));
-  save();
+  markUnsaved();
   renderResetPositions();
   toast(`Registo de reset de ${asset} removido`);
 }
@@ -3452,7 +3496,7 @@ async function undoAction() {
   data.trades = prev.trades;
   data.pendingMatches = prev.pendingMatches;
   autoMatchAll();
-  await save();
+  markUnsaved();
   renderAll();
   toast('Undo — trade restored', 'info');
   updateUndoButtons();
@@ -3465,7 +3509,7 @@ async function redoAction() {
   data.trades = next.trades;
   data.pendingMatches = next.pendingMatches;
   autoMatchAll();
-  await save();
+  markUnsaved();
   renderAll();
   toast('Redo', 'info');
   updateUndoButtons();
@@ -3565,7 +3609,7 @@ async function recalcFxRates() {
     await new Promise(r=>setTimeout(r,300));
   }
   autoMatchAll();
-  await save();
+  markUnsaved();
   renderAll();
   status.textContent=`Concluído: ${done} actualizadas, ${failed} falhadas.`;
   btn.disabled=false;
