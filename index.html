@@ -2372,11 +2372,21 @@ function renderDashboard() {
   const closedCount=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null&&inFilterRange(t.date)).length;
   $('m-realised-sub').textContent=`${closedCount} closed trades · ${isAll?'all time':'selected period'}`;
 
-  // ROI = Realised P&L ÷ Cost of closed positions × 100
-  // Cost of closed positions = sum of costBasisGBP for sells in the filtered period
-  const closedSells=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null&&inFilterRange(t.date));
-  const totalCostClosed=closedSells.reduce((s,t)=>s+(t.costBasisGBP||0),0);
-  const roi=totalCostClosed>0?(rFiltered/totalCostClosed*100):0;
+  // ROI = (Market Value + Realised P&L all time) ÷ Total Cost Basis all time × 100
+  const allSells=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null);
+  const realisedAllTime=allSells.reduce((s,t)=>s+(t.pnlGBP||0),0);
+  const totalInvested=data.trades.filter(t=>t.type==='buy').reduce((s,t)=>s+(t.valueGBP||0),0);
+  const usdgbp_roi=livePrices['__USDGBP__']||0.79;
+  const marketValue=getPositions().reduce((s,p)=>{
+    const lp=livePrices[p.asset];
+    if(!lp?.price) return s+(p.totalCostGBP||0);
+    let mv=0;
+    if(p.class==='Crypto') mv=p.totalQty*lp.price*usdgbp_roi;
+    else if(lp.currency==='GBP') mv=p.totalQty*lp.price;
+    else mv=p.totalQty*lp.price*usdgbp_roi;
+    return s+mv;
+  },0);
+  const roi=totalInvested>0?((marketValue+realisedAllTime-totalInvested)/totalInvested*100):0;
   const roiEl=$('m-roi');
   if(roiEl){
     roiEl.textContent=`${roi>=0?'+':''}${roi.toFixed(2)}%`;
