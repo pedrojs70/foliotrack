@@ -483,9 +483,9 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--blue),transparent);"></div><div class="metric-label">Open Positions</div><div class="metric-value" id="m-positions">0</div><div class="metric-sub neu" id="m-positions-sub">0 brokers</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--purple),transparent);"></div><div class="metric-label">Realised P&amp;L</div><div class="metric-value" id="m-realised">£0</div><div class="metric-sub neu" id="m-realised-sub">0 closed</div></div>
           <div class="metric" style="cursor:pointer;" onclick="toggleTheme()" title="Mudar tema">
-            <div class="metric-bar" style="background:linear-gradient(90deg,var(--amber),transparent);"></div>
-            <div class="metric-label">Total Fees</div>
-            <div class="metric-value" id="m-fees">£0</div>
+            <div class="metric-bar" style="background:linear-gradient(90deg,var(--green),transparent);"></div>
+            <div class="metric-label">ROI</div>
+            <div class="metric-value" id="m-roi">0%</div>
             <div class="metric-sub neu" style="display:flex;align-items:center;gap:4px;">
               <span id="theme-label">☀ Light</span>
               <span style="color:var(--text3);font-size:10px;">· click to toggle</span>
@@ -2371,7 +2371,17 @@ function renderDashboard() {
   $('m-realised').textContent=gbp(rFiltered);
   const closedCount=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null&&inFilterRange(t.date)).length;
   $('m-realised-sub').textContent=`${closedCount} closed trades · ${isAll?'all time':'selected period'}`;
-  $('m-fees').textContent=gbp(fFiltered);
+
+  // ROI = Realised P&L ÷ Cost of closed positions × 100
+  // Cost of closed positions = sum of costBasisGBP for sells in the filtered period
+  const closedSells=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null&&inFilterRange(t.date));
+  const totalCostClosed=closedSells.reduce((s,t)=>s+(t.costBasisGBP||0),0);
+  const roi=totalCostClosed>0?(rFiltered/totalCostClosed*100):0;
+  const roiEl=$('m-roi');
+  if(roiEl){
+    roiEl.textContent=`${roi>=0?'+':''}${roi.toFixed(2)}%`;
+    roiEl.style.color=roi>=0?'var(--green)':'var(--red)';
+  }
 
   // Top Gainers & Losers
   const byAsset={};
