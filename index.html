@@ -456,6 +456,12 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
       <div class="topbar-title" id="page-title">Dashboard</div>
       <div class="topbar-right">
         <div class="date-filter">
+          <select id="dash-class-filter" onchange="renderDashboard()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:4px 9px;color:var(--text2);font-family:var(--font);font-size:11px;font-weight:500;outline:none;cursor:pointer;">
+            <option value="all">All</option>
+            <option value="spot">Crypto Spot</option>
+            <option value="stocks">Stocks &amp; ETFs</option>
+          </select>
+          <span class="date-sep">|</span>
           <div class="date-chip" onclick="setFilter(this,'fy2627')">UK FY 26/27</div>
           <div class="date-chip" onclick="setFilter(this,'fy2526')">UK FY 25/26</div>
           <div class="date-chip" onclick="setFilter(this,'ytd')">YTD</div>
@@ -480,8 +486,8 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
       <div class="content">
         <div class="metrics" id="dash-metrics">
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--accent),transparent);"></div><div class="metric-label">Total Cost Basis</div><div class="metric-value" id="m-total">£0</div><div class="metric-sub neu" id="m-total-sub">no trades yet</div></div>
-          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--blue),transparent);"></div><div class="metric-label">Open Positions</div><div class="metric-value" id="m-positions">0</div><div class="metric-sub neu" id="m-positions-sub">0 brokers</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--purple),transparent);"></div><div class="metric-label">Realised P&amp;L</div><div class="metric-value" id="m-realised">£0</div><div class="metric-sub neu" id="m-realised-sub">0 closed</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--blue),transparent);"></div><div class="metric-label">Avg Win / Avg Loss</div><div class="metric-value" id="m-avgwin">—</div><div class="metric-sub neu" id="m-avgwin-sub">excl. futures</div></div>
           <div class="metric" style="cursor:pointer;" onclick="toggleTheme()" title="Mudar tema">
             <div class="metric-bar" style="background:linear-gradient(90deg,var(--green),transparent);"></div>
             <div class="metric-label">ROI</div>
@@ -2357,30 +2363,56 @@ function renderDashboard() {
   const pos=getPositions();
   const total=pos.reduce((s,p)=>s+p.totalCostGBP,0);
   const rFiltered=realisedFiltered();
-  const fFiltered=totalFeesFiltered();
   const brokers=new Set(pos.map(p=>normBroker(p.broker)));
-  const {from,to}=getFilterDates();
   const fromVal=$('date-from')?.value||'';
   const toVal=$('date-to')?.value||'';
   const isAll=fromVal==='2018-01-01'&&toVal==='2099-01-01';
 
+  // Class filter
+  const classFilter=$('dash-class-filter')?.value||'all';
+  function matchesClass(t) {
+    if(classFilter==='all') return true;
+    if(classFilter==='spot') return t.class==='Crypto'&&t.subclass!=='Futures'&&t.notes!=='Futures';
+    if(classFilter==='stocks') return t.class==='Stock/ETF';
+    return true;
+  }
+
   $('m-total').textContent=gbp(total);
   $('m-total-sub').textContent='Open positions cost basis';
-  $('m-positions').textContent=pos.length;
-  $('m-positions-sub').textContent=`across ${brokers.size} broker${brokers.size!==1?'s':''}`;
-  $('m-realised').textContent=gbp(rFiltered);
-  const closedSells=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null&&inFilterRange(t.date));
+
+  // Realised P&L — filtered by period AND class
+  const closedSells=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null&&inFilterRange(t.date)&&matchesClass(t));
+  const realisedClass=closedSells.reduce((s,t)=>s+(t.pnlGBP||0),0);
   const closedCount=closedSells.length;
   const winCount=closedSells.filter(t=>t.pnlGBP>0).length;
   const winRate=closedCount>0?Math.round(winCount/closedCount*100):0;
+  $('m-realised').textContent=gbp(realisedClass);
+  $('m-realised').style.color=realisedClass>=0?'var(--green)':'var(--red)';
   $('m-realised-sub').textContent=`${closedCount} closed · ${winRate}% win rate`;
 
-  // ROI = Realised P&L ÷ Cost of Closed Positions × 100
-  const totalCostClosed=closedSells.reduce((s,t)=>s+(t.costBasisGBP||0),0);
-  const roi=totalCostClosed>0?(rFiltered/totalCostClosed*100):0;
+  // Avg Win % and Avg Loss % — excl. futures (no costBasisGBP)
+  const nonFutures=closedSells.filter(t=>t.costBasisGBP&&t.costBasisGBP>0);
+  const winners=nonFutures.filter(t=>t.pnlGBP>0);
+  const losers=nonFutures.filter(t=>t.pnlGBP<0);
+  const avgWinPct=winners.length>0?(winners.reduce((s,t)=>s+(t.pnlGBP/t.costBasisGBP*100),0)/winners.length):null;
+  const avgLossPct=losers.length>0?(losers.reduce((s,t)=>s+(t.pnlGBP/t.costBasisGBP*100),0)/losers.length):null;
+  const avgWinEl=$('m-avgwin');
+  if(avgWinEl){
+    if(avgWinPct!==null||avgLossPct!==null){
+      avgWinEl.innerHTML=`<span style="color:var(--green);font-size:16px;">${avgWinPct!==null?'+'+avgWinPct.toFixed(2)+'%':'—'}</span> <span style="color:var(--text3);font-size:13px;">/</span> <span style="color:var(--red);font-size:16px;">${avgLossPct!==null?avgLossPct.toFixed(2)+'%':'—'}</span>`;
+      $('m-avgwin-sub').textContent=`${winners.length}W · ${losers.length}L · excl. futures`;
+    } else {
+      avgWinEl.textContent='—';
+    }
+  }
+
+  // ROI — filtered by period AND class, excl. futures
+  const totalCostClosed=nonFutures.reduce((s,t)=>s+(t.costBasisGBP||0),0);
+  const realisedNonFutures=nonFutures.reduce((s,t)=>s+(t.pnlGBP||0),0);
+  const roi=totalCostClosed>0?(realisedNonFutures/totalCostClosed*100):0;
   const roiEl=$('m-roi');
   if(roiEl){
-    roiEl.textContent=`${roi>=0?'+':''}${roi.toFixed(2)}%`;
+    roiEl.textContent=totalCostClosed>0?`${roi>=0?'+':''}${roi.toFixed(2)}%`:'—';
     roiEl.style.color=roi>=0?'var(--green)':'var(--red)';
   }
 
