@@ -663,7 +663,6 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
       <div class="content">
         <div class="grid4" id="fee-stats">
           <div class="fee-stat"><div class="fee-stat-val" id="fee-total">£0</div><div class="fee-stat-lbl">Total Fees</div></div>
-          <div class="fee-stat"><div class="fee-stat-val" id="fee-fy">£0</div><div class="fee-stat-lbl">UK FY 25/26</div></div>
           <div class="fee-stat"><div class="fee-stat-val" id="fee-avg">£0</div><div class="fee-stat-lbl">Avg per trade</div></div>
           <div class="fee-stat"><div class="fee-stat-val" id="fee-trades">0</div><div class="fee-stat-lbl">Trades with fees</div></div>
         </div>
@@ -2894,7 +2893,6 @@ function renderFees() {
   const filteredTotal=filteredFees.reduce((s,t)=>s+(t.feesGBP||0),0);
   const avg=filteredFees.length?filteredTotal/filteredFees.length:0;
   $('fee-total').textContent=gbp(filteredTotal);
-  $('fee-fy').textContent=gbp(fyFees);
   $('fee-avg').textContent=gbp(avg);
   $('fee-trades').textContent=filteredFees.length;
 
@@ -3170,7 +3168,9 @@ function renderSnapshots() {
 
 function renderBarChart(id, monthly, height, color) {
   const el=$(id); if(!el)return;
-  const entries=Object.entries(monthly).sort();
+  const allEntries=Object.entries(monthly).sort();
+  // Show max 12 most recent bars
+  const entries=allEntries.slice(-12);
   if(!entries.length){el.innerHTML=`<div style="font-size:12px;color:var(--text3);text-align:center;width:100%;padding:${height/3}px 0;">No data</div>`;return;}
   const vals=entries.map(([,v])=>v);
   const maxAbs=Math.max(...vals.map(Math.abs),1);
