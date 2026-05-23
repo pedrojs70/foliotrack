@@ -136,6 +136,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 /* METRICS */
 .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:20px;}
 .metrics-3{grid-template-columns:repeat(3,1fr)!important;}
+.metrics-4{grid-template-columns:repeat(4,1fr)!important;}
 .metric{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:15px 16px;position:relative;overflow:hidden;transition:border-color 0.2s;}
 .metric:hover{border-color:var(--border2);}
 .metric-bar{position:absolute;top:0;left:0;right:0;height:2px;}
@@ -555,8 +556,8 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
           <input type="text" id="trades-search" placeholder="Search asset, broker, tag..." oninput="tradesPage=1;renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;width:240px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button class="btn btn-secondary btn-sm" id="btn-undo" onclick="undoAction()" disabled title="Undo (Ctrl+Z)">↩ Undo</button>
-            <button class="btn btn-secondary btn-sm" id="btn-redo" onclick="redoAction()" disabled title="Redo (Ctrl+Shift+Z)">↪ Redo</button>
+            <button class="btn btn-secondary" id="btn-undo" onclick="undoAction()" disabled title="Undo (Ctrl+Z)" style="padding:4px 8px;font-size:11px;">↩</button>
+            <button class="btn btn-secondary" id="btn-redo" onclick="redoAction()" disabled title="Redo (Ctrl+Shift+Z)" style="padding:4px 8px;font-size:11px;">↪</button>
             <span id="selected-trades-count" style="font-size:12px;color:var(--text3);display:none;"></span>
             <button class="btn btn-danger btn-sm" id="btn-delete-selected" style="display:none;" onclick="deleteSelectedTrades()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
@@ -578,9 +579,8 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
     <div id="view-dividends" class="view">
       <div class="content">
         <div class="metrics metrics-3">
-          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--green),transparent);"></div><div class="metric-label">Total Dividends (UK FY)</div><div class="metric-value" id="div-total-fy">£0</div><div class="metric-sub neu">Income tax applicable</div></div>
+          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--green),transparent);"></div><div class="metric-label">Dividends Received</div><div class="metric-value" id="div-total-fy">£0</div><div class="metric-sub neu" id="div-period-sub">selected period</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--amber),transparent);"></div><div class="metric-label">Withholding Tax Paid</div><div class="metric-value" id="div-wht">£0</div><div class="metric-sub neu">may be reclaimable</div></div>
-          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--blue),transparent);"></div><div class="metric-label">Net Received</div><div class="metric-value" id="div-net">£0</div><div class="metric-sub neu">after withholding tax</div></div>
         </div>
         <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
           <button class="btn btn-primary btn-sm" onclick="openModal('modal-dividend')">
@@ -595,15 +595,6 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
     <!-- P&L -->
     <div id="view-pnl" class="view">
       <div class="content">
-        <div class="metrics metrics-2">
-          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--green),transparent);"></div><div class="metric-label">Realised P&amp;L</div><div class="metric-value" id="pnl-realised">£0</div><div class="metric-sub neu" id="pnl-period-label">selected period</div></div>
-          <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--purple),transparent);"></div>
-            <div class="metric-label">CGT Allowance 25/26</div>
-            <div class="metric-value" id="pnl-cgt">£0 / £3,000</div>
-            <div class="cgt-bar-bg"><div class="cgt-bar-fill" id="cgt-fill" style="width:0%"></div></div>
-            <div class="metric-sub neu" id="pnl-cgt-sub">£3,000 remaining · UK FY 25/26</div>
-          </div>
-        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
           <div class="card">
             <div class="card-head">
@@ -687,7 +678,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
     <!-- TAX REPORT -->
     <div id="view-tax" class="view">
       <div class="content">
-        <div class="metrics metrics-3">
+        <div class="metrics metrics-4">
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--green),transparent);"></div><div class="metric-label">Capital Gains (UK FY)</div><div class="metric-value" id="tax-gains">£0</div><div class="metric-sub neu">CGT applicable</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--red),transparent);"></div><div class="metric-label">Capital Losses</div><div class="metric-value" id="tax-losses">£0</div><div class="metric-sub neu">can offset gains</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--accent),transparent);"></div><div class="metric-label">Net Taxable Gain</div><div class="metric-value" id="tax-net">£0</div><div class="metric-sub neu">gains minus losses</div></div>
@@ -2698,14 +2689,19 @@ function dismissDivWarning(key) {
 }
 
 function renderDividends() {
-  const fyStart=new Date('2025-04-06'),fyEnd=new Date('2026-04-05');
-  const fyDivs=data.dividends.filter(d=>{const dt=new Date(d.date);return dt>=fyStart&&dt<=fyEnd;});
-  const totalFY=fyDivs.reduce((s,d)=>s+(d.valueGBP||d.gross||0),0);
-  const whtTotal=data.dividends.reduce((s,d)=>s+(d.wht||0),0);
-  const netTotal=data.dividends.reduce((s,d)=>s+(d.valueGBP||d.gross||0),0)-whtTotal;
-  $('div-total-fy').textContent=gbp(totalFY);
-  $('div-wht').textContent=gbp(whtTotal);
-  $('div-net').textContent=gbp(netTotal);
+  // Use temporal filter for metrics
+  const filteredDivs=data.dividends.filter(d=>inFilterRange(d.date));
+  const totalFiltered=filteredDivs.reduce((s,d)=>s+(d.valueGBP||d.gross||0),0);
+  const whtFiltered=filteredDivs.reduce((s,d)=>s+(d.wht||0),0);
+  $('div-total-fy').textContent=gbp(totalFiltered);
+  $('div-wht').textContent=gbp(whtFiltered);
+  const sub=$('div-period-sub');
+  if(sub){
+    const fromVal=$('date-from')?.value||'';
+    const toVal=$('date-to')?.value||'';
+    const isAll=fromVal==='2018-01-01'&&toVal==='2099-01-01';
+    sub.textContent=isAll?'all time':'selected period';
+  }
   const wrap=$('div-table-wrap');
   if(!data.dividends.length){wrap.innerHTML=emptyState('No dividends yet','Dividends from IBKR and HL CSVs are detected automatically on import.');return;}
 
@@ -2758,17 +2754,8 @@ function renderPnL() {
     const tl=to?to.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'';
     badgeLabel=`${fl} – ${tl}`; periodLabel=badgeLabel;
   }
-  $('pnl-realised').textContent=gbp(rFiltered);
   if($('pnl-period-label')) $('pnl-period-label').textContent=periodLabel;
   if($('pnl-period-badge')) $('pnl-period-badge').textContent=badgeLabel;
-
-  // CGT allowance — always UK FY
-  const rFY=realisedFY();
-  const cgtUsed=Math.max(0,rFY);
-  const cgtPct=Math.min(100,Math.round(cgtUsed/3000*100));
-  $('cgt-fill').style.width=cgtPct+'%';
-  $('pnl-cgt').textContent=`${gbp(cgtUsed)} / £3,000`;
-  $('pnl-cgt-sub').textContent=`£${Math.max(0,3000-cgtUsed).toLocaleString()} remaining · UK FY 25/26`;
 
   // Monthly P&L — numeric table with running cumulative, with class/broker filters
   const monthlyClassFilter=$('pnl-monthly-class-filter')?.value||'';
@@ -3189,12 +3176,12 @@ function renderBarChart(id, monthly, height, color) {
   const maxAbs=Math.max(...vals.map(Math.abs),1);
   const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   el.innerHTML=entries.map(([m,v])=>{
-    const h=Math.round(Math.abs(v)/maxAbs*(height-20));
+    const h=Math.round(Math.abs(v)/maxAbs*(height-32));
     const c=color||(v>=0?'var(--green)':'var(--red)');
-    // m is "YYYY-MM" — show "Mon YY"
     const parts=m.split('-');
     const lbl=parts.length>=2?`${months[parseInt(parts[1])-1]} ${parts[0].substring(2)}`:m;
-    return `<div class="bar-col"><div class="bar-fill" style="height:${h}px;background:${c};opacity:0.85;" title="${m}: ${gbp(v)}"></div><div class="bar-lbl">${lbl}</div></div>`;
+    const valLbl=Math.abs(v)>=1000?`£${(Math.abs(v)/1000).toFixed(1)}k`:`£${Math.abs(v).toFixed(0)}`;
+    return `<div class="bar-col"><div style="font-size:9px;color:var(--text3);text-align:center;line-height:1.2;margin-bottom:2px;">${valLbl}</div><div class="bar-fill" style="height:${h}px;background:${c};opacity:0.85;" title="${m}: ${gbp(v)}"></div><div class="bar-lbl">${lbl}</div></div>`;
   }).join('');
 }
 
