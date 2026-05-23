@@ -456,12 +456,6 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
       <div class="topbar-title" id="page-title">Dashboard</div>
       <div class="topbar-right">
         <div class="date-filter">
-          <select id="dash-class-filter" onchange="renderDashboard()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:4px 9px;color:var(--text2);font-family:var(--font);font-size:11px;font-weight:500;outline:none;cursor:pointer;">
-            <option value="all">All</option>
-            <option value="spot">Crypto Spot</option>
-            <option value="stocks">Stocks &amp; ETFs</option>
-          </select>
-          <span class="date-sep">|</span>
           <div class="date-chip" onclick="setFilter(this,'fy2627')">UK FY 26/27</div>
           <div class="date-chip" onclick="setFilter(this,'fy2526')">UK FY 25/26</div>
           <div class="date-chip" onclick="setFilter(this,'ytd')">YTD</div>
@@ -484,6 +478,13 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view active">
       <div class="content">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+          <select id="dash-class-filter" onchange="renderDashboard()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:4px 9px;color:var(--text2);font-family:var(--font);font-size:12px;font-weight:500;outline:none;cursor:pointer;">
+            <option value="all">All</option>
+            <option value="spot">Crypto Spot</option>
+            <option value="stocks">Stocks &amp; ETFs</option>
+          </select>
+        </div>
         <div class="metrics" id="dash-metrics">
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--accent),transparent);"></div><div class="metric-label">Total Cost Basis</div><div class="metric-value" id="m-total">£0</div><div class="metric-sub neu" id="m-total-sub">no trades yet</div></div>
           <div class="metric"><div class="metric-bar" style="background:linear-gradient(90deg,var(--purple),transparent);"></div><div class="metric-label">Realised P&amp;L</div><div class="metric-value" id="m-realised">£0</div><div class="metric-sub neu" id="m-realised-sub">0 closed</div></div>
