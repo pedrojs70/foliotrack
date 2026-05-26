@@ -1031,6 +1031,8 @@ function markUnsaved() {
   sync('unsaved', '● Não guardado');
   const btn = $('manual-save-btn');
   if(btn) { btn.style.background='#b45309'; btn.style.color='#fff'; btn.textContent='💾 Guardar'; }
+  const mobBtn = $('mob-save-btn');
+  if(mobBtn) mobBtn.style.color='#b45309';
 }
 
 function markSaved() {
@@ -1038,6 +1040,8 @@ function markSaved() {
   sync('ok', 'Guardado');
   const btn = $('manual-save-btn');
   if(btn) { btn.style.background=''; btn.style.color=''; btn.textContent='💾 Guardado'; }
+  const mobBtn = $('mob-save-btn');
+  if(mobBtn) mobBtn.style.color='var(--accent)';
   setTimeout(()=>{ sync('ok','Ligado'); if(btn) btn.textContent='💾 Guardar'; }, 2000);
 }
 
@@ -2563,51 +2567,45 @@ function renderPositions() {
   if(!pos.length){wrap.innerHTML=emptyState('No positions','Import a CSV to populate.');return;}
   const si=(col)=>posSort.col===col?(posSort.dir===1?' ↑':' ↓'):'';
   const th=(col,label)=>`<th style="cursor:pointer;user-select:none;" onclick="sortPos('${col}')">${label}${si(col)}</th>`;
-  wrap.innerHTML=`<table><thead><tr>${th('name','Asset')}${th('class','Class')}${th('broker','Broker')}${th('side','Side')}${th('qty','Qty Open')}${th('avgcost','Avg Cost')}${th('cost','Cost Basis')}${th('live','Live Price')}${th('market','Market Value (GBP)')}${th('unreal','Unreal. P&L')}<th>Method</th>${th('since','Since')}<th></th></tr></thead><tbody>${pos.map(p=>{
+  wrap.innerHTML=`<table><thead><tr>${th('name','Asset')}${th('class','Class')}${th('broker','Broker')}${th('side','Side')}${th('qty','Qty Open')}${th('avgcost','Avg Cost')}${th('cost','Cost Basis')}${th('live','Live Price')}${th('market','Market Value (GBP)')}${th('unreal','Unreal. P&L')}${th('unrealpct','Unreal %')}<th>Method</th>${th('since','Since')}<th></th></tr></thead><tbody>${pos.map(p=>{
     const method=p.class==='Crypto'?'<span class="badge badge-gray">FIFO</span>':'<span class="badge badge-gray">Pool</span>';
     const lp=livePrices[p.asset];
     const usdgbp=livePrices['__USDGBP__']||0.79;
-    let livePriceCell='—',marketValCell='—',unrealCell='—';
+    let livePriceCell='—',marketValCell='—',unrealCell='—',unrealPctCell='—';
 
     if(lp?.price) {
       let marketValGBP=0;
       let livePriceDisplay='';
 
       if(p.class==='Crypto') {
-        // Crypto — price in USD, convert to GBP
         marketValGBP = p.totalQty * lp.price * usdgbp;
         const gbpPrice = lp.price * usdgbp;
         livePriceDisplay = `£${gbpPrice.toFixed(gbpPrice<1?4:2)}`;
       } else if(lp.currency==='GBP') {
-        // Already in GBP (HL ETFs, LSE stocks)
         marketValGBP = p.totalQty * lp.price;
         livePriceDisplay = `£${lp.price.toFixed(2)}`;
       } else if(lp.currency==='USD') {
-        // USD stocks (IBKR US) — convert to GBP
         marketValGBP = p.totalQty * lp.price * usdgbp;
         const gbpPrice = lp.price * usdgbp;
         livePriceDisplay = `£${gbpPrice.toFixed(2)}`;
       } else {
-        // Fallback
         marketValGBP = p.totalQty * lp.price;
         livePriceDisplay = lp.price.toFixed(2);
       }
 
-      // Unrealised P&L:
-      // Long:  gain when price rises  → marketVal - costBasis
-      // Short: gain when price falls  → costBasis - marketVal
       const unrealPnl = p.side==='Short'
         ? p.totalCostGBP - marketValGBP
         : marketValGBP - p.totalCostGBP;
+      const unrealPct = p.totalCostGBP>0?(unrealPnl/p.totalCostGBP*100):0;
       livePriceCell = `<span class="mono">${livePriceDisplay}</span>`;
       marketValCell = `<span class="mono">${gbp(marketValGBP)}</span>`;
       unrealCell = `<span class="mono ${unrealPnl>=0?'pos':'neg'}">${gbp(unrealPnl)}</span>`;
+      unrealPctCell = `<span class="mono ${unrealPct>=0?'pos':'neg'}">${unrealPct>=0?'+':''}${unrealPct.toFixed(2)}%</span>`;
     }
 
-    const tags=(p.tags||[]).map(t=>`<span class="tag-pill">${t}</span>`).join('');
     const isReset=data.resetPositions.some(r=>r.asset===p.asset&&r.broker===p.broker);
     const resetBtn=`<button class="btn btn-sm" style="padding:2px 8px;font-size:11px;opacity:0.7;" onclick="resetPosition('${p.asset}','${p.broker}')" title="Ignorar resíduo e resetar posição">Reset</button>`;
-    return `<tr><td><strong>${p.asset}</strong></td><td>${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td><td>${livePriceCell}</td><td>${marketValCell}</td><td>${unrealCell}</td><td>${method}</td><td style="color:var(--text3);font-size:12px;">${p.openDate||p.since||'—'}</td><td>${resetBtn}</td></tr>`;
+    return `<tr><td><strong>${p.asset}</strong></td><td>${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td><td>${livePriceCell}</td><td>${marketValCell}</td><td>${unrealCell}</td><td>${unrealPctCell}</td><td>${method}</td><td style="color:var(--text3);font-size:12px;">${p.openDate||p.since||'—'}</td><td>${resetBtn}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -2659,15 +2657,14 @@ function renderTrades() {
       <button class="btn btn-secondary btn-sm" onclick="setTradesPage(${totalPages})" ${tradesPage===totalPages?'disabled':''}>»</button>
     </div>`:'';
 
-  wrap.innerHTML=`<table><thead><tr><th></th><th>Date</th><th>Type</th><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty</th><th>Price (orig)</th><th>FX</th><th>Value (orig)</th><th>Value (GBP)</th><th>Fees (GBP)</th><th>P&L</th><th>Tags</th><th>SL/TP</th><th></th></tr></thead><tbody>${paginated.map(t=>{
+  wrap.innerHTML=`<table><thead><tr><th></th><th>Date</th><th>Type</th><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty</th><th>Price (orig)</th><th>FX</th><th>Value (orig)</th><th>Value (GBP)</th><th>Fees (GBP)</th><th>P&L</th><th>P&L %</th><th></th></tr></thead><tbody>${paginated.map(t=>{
     const isBuy=t.type==='buy';
     const pnlCell=t.pnlGBP!=null?`<span class="${t.pnlGBP>=0?'pos':'neg'}">${gbp(t.pnlGBP)}</span>`:'<span style="color:var(--text3);">—</span>';
+    const pnlPctCell=t.pnlGBP!=null&&t.costBasisGBP>0?`<span class="mono ${t.pnlGBP>=0?'pos':'neg'}">${t.pnlGBP>=0?'+':''}${(t.pnlGBP/t.costBasisGBP*100).toFixed(2)}%</span>`:'<span style="color:var(--text3);">—</span>';
     const origPrice=t.price?`${t.currency==='GBP'?'£':t.currency==='USDT'||t.currency==='USD'?'$':'€'}${t.price.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'—';
-    const tags=(t.tags||[]).map(tg=>`<span class="tag-pill">${tg}</span>`).join('');
-    const sltp=(t.sl||t.tp)?`<span style="font-size:11px;color:var(--text3);">${t.sl?'SL:'+t.sl:''}${t.sl&&t.tp?' ':''}${t.tp?'TP:'+t.tp:''}</span>`:'—';
     const sel=selectedTradeIds.has(t.id)?'selected':'';
     const pairBadge=t.pairId?`<span class="badge badge-purple" style="font-size:10px;" title="${getPairName(t.pairId)}">pair</span>`:'';
-    return `<tr class="selectable ${sel}" onclick="toggleTradeSelect('${t.id}',event)"><td>${pairBadge}</td><td style="color:var(--text3);font-size:12px;">${t.date}</td><td><span class="badge ${isBuy?'badge-green':'badge-red'}">${isBuy?'Buy':'Sell'}</span></td><td><strong>${t.asset}</strong></td><td>${classBadge(t.class)}</td><td>${brokerTag(t.broker)}</td><td><span class="badge ${t.side==='Short'?'badge-red':'badge-green'}" style="font-size:10px;">${t.side}</span></td><td class="mono">${qty(t.qty)}</td><td class="mono">${origPrice}</td><td class="mono" style="color:var(--text3);font-size:11px;">${t.fxRate&&t.fxRate!==1?t.fxRate.toFixed(4):'—'}</td><td class="mono" style="color:var(--text3);">${t.price&&t.currency!=='GBP'?`${t.currency==='USDT'||t.currency==='USD'?'$':'€'}${(t.qty*(t.price||0)).toFixed(2)}`:'—'}</td><td class="mono">${t.valueGBP?gbp(t.valueGBP):'—'}</td><td class="mono" style="color:var(--amber);">${t.feesGBP?gbp(t.feesGBP):'—'}</td><td class="mono">${pnlCell}</td><td>${tags||'—'}</td><td>${sltp}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();delTrade('${t.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`;
+    return `<tr class="selectable ${sel}" onclick="toggleTradeSelect('${t.id}',event)"><td>${pairBadge}</td><td style="color:var(--text3);font-size:12px;">${t.date}</td><td><span class="badge ${isBuy?'badge-green':'badge-red'}">${isBuy?'Buy':'Sell'}</span></td><td><strong>${t.asset}</strong></td><td>${classBadge(t.class)}</td><td>${brokerTag(t.broker)}</td><td><span class="badge ${t.side==='Short'?'badge-red':'badge-green'}" style="font-size:10px;">${t.side}</span></td><td class="mono">${qty(t.qty)}</td><td class="mono">${origPrice}</td><td class="mono" style="color:var(--text3);font-size:11px;">${t.fxRate&&t.fxRate!==1?t.fxRate.toFixed(4):'—'}</td><td class="mono" style="color:var(--text3);">${t.price&&t.currency!=='GBP'?`${t.currency==='USDT'||t.currency==='USD'?'$':'€'}${(t.qty*(t.price||0)).toFixed(2)}`:'—'}</td><td class="mono">${t.valueGBP?gbp(t.valueGBP):'—'}</td><td class="mono" style="color:var(--amber);">${t.feesGBP?gbp(t.feesGBP):'—'}</td><td class="mono">${pnlCell}</td><td>${pnlPctCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();delTrade('${t.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`;
   }).join('')}</tbody></table>${paginationHTML}`;
 }
 
@@ -3847,30 +3844,32 @@ async function refreshLivePrices() {
     'Rio Tinto plc Ordinary 10p': 'RIO.L',
     'Babcock International Group Ordinary 60p': 'BAB.L',
     'Oxford Biomedica plc Ordinary 50p': 'OXB.L',
+    'iShares plc MSCI Brazil UCITS ETF (Dist)': 'IBZL.L',
   };
 
   const ibkrYahooMap = {
-    'ACS':  {ticker:'ACS.MC',  currency:'EUR'},
-    'GALP': {ticker:'GALP.LS', currency:'EUR'},
-    'ALFEN':{ticker:'ALFEN.AS',currency:'EUR'},
-    'BAB':  {ticker:'BAB.L',   currency:'GBP'},
-    'BEEM': null,
-    'REP':  {ticker:'REP.MC',  currency:'EUR'},
-    'PSG':  {ticker:'PSG.MC',  currency:'EUR'},
-    'FAE':  {ticker:'FAE.MC',  currency:'EUR'},
-    'COCO': {ticker:'COCO.L',  currency:'USD'},
-    'NM5':  {ticker:'NIC.AX',  currency:'AUD'},
-    'INMD': null,
-    'LFVN': null,
-    'PBR':  null,
-    'EC':   null,
-    'EPM':  null,
-    'BYRN': null,
-    'NKE':  null,
-    'NVEC': null,
-    'RDW':  null,
-    'RIG':  null,
-    'DAC':  null,
+    'ACS':   {ticker:'ACS.MC',    currency:'EUR'},
+    'GALP':  {ticker:'GALP.LS',   currency:'EUR'},
+    'ALFEN': {ticker:'ALFEN.AS',  currency:'EUR'},
+    'BAB':   {ticker:'BAB.L',     currency:'GBP'},
+    'BEEM':  null,
+    'REP':   {ticker:'REP.MC',    currency:'EUR'},
+    'PSG':   {ticker:'PSG.MC',    currency:'EUR'},
+    'FAE':   {ticker:'FAE.MC',    currency:'EUR'},
+    'COCO':  {ticker:'COCO.L',    currency:'USD'},
+    'NM5':   {ticker:'NIC.AX',    currency:'AUD'},
+    'SLBEN': {ticker:'SLBEN.LS',  currency:'EUR'},
+    'INMD':  null,
+    'LFVN':  null,
+    'PBR':   null,
+    'EC':    null,
+    'EPM':   null,
+    'BYRN':  null,
+    'NKE':   null,
+    'NVEC':  null,
+    'RDW':   null,
+    'RIG':   null,
+    'DAC':   null,
   };
 
   async function fetchYahooWorker(yahooTicker, currency='GBP') {
@@ -3975,9 +3974,13 @@ function doLogout() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
     <span>P&L</span>
   </div>
-  <div class="mob-item" data-view="import" onclick="showView('import')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-    <span>Import</span>
+  <div class="mob-item" data-view="tax" onclick="showView('tax')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+    <span>Tax</span>
+  </div>
+  <div class="mob-item" onclick="manualSave()" style="color:var(--accent);" id="mob-save-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+    <span>Save</span>
   </div>
   <div class="mob-item" onclick="doLogout()" style="color:var(--red)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
