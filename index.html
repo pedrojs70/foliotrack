@@ -1657,7 +1657,7 @@ function parseIBKR(rows) {
       // Clean symbol — remove numeric prefixes (order IDs concatenated with ticker)
       const symbol=rawSymbol.replace(/^\d+([A-Z]+)$/,'$1').replace(/^[0-9]{8,}/, '').trim();
       const dateStr=(obj['Date']||'').trim();
-      const currency=(obj['Price Currency']||'USD').trim();
+      const currency=((obj['Price Currency']||'').trim()||'USD').replace(/^-$/, 'USD');
       const qty=parseFloat(obj['Quantity'])||0;
       const price=parseFloat(obj['Price'])||0;
       const comm=Math.abs(parseFloat(obj['Commission'])||0);
@@ -1691,7 +1691,7 @@ function parseIBKR(rows) {
       const obj={};
       divHeaders.forEach((h,i)=>obj[h]=(row[i+2]||'').trim());
       const gross=Math.abs(parseFloat(obj['Amount']||obj['Gross Amount']||0));
-      const currency=obj['Currency']||'USD';
+      const currency=(obj['Currency']||'USD').replace(/^-$/, 'USD');
       const dateStr=obj['Date']||'';
       const desc=obj['Description']||'';
       if(gross>0) dividends.push({id:genId(),asset:desc.split('(')[0].trim()||desc.split(' ')[0],date:parseDate(dateStr),gross,wht:0,currency,broker:'IBKR',valueGBP:null,fxRate:1});
