@@ -872,7 +872,26 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
   </div>
 </div>
 
-<!-- NEW PORTFOLIO -->
+<!-- EDIT TRADE DATETIME -->
+<div class="modal-overlay" id="modal-edit-datetime">
+  <div class="modal">
+    <div class="modal-title">Editar Data/Hora</div>
+    <div class="modal-sub" id="edit-datetime-sub">Corrigir a data e hora da trade</div>
+    <input type="hidden" id="edit-datetime-id">
+    <div class="form-row">
+      <label class="form-label">Data</label>
+      <input type="date" class="form-input" id="edit-datetime-date">
+    </div>
+    <div class="form-row">
+      <label class="form-label">Hora (opcional)</label>
+      <input type="time" class="form-input" id="edit-datetime-time" placeholder="HH:MM">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-datetime')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditDatetime()">Guardar</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-new-portfolio">
   <div class="modal">
     <div class="modal-title">New Portfolio</div>
@@ -2671,7 +2690,7 @@ function renderTrades() {
     const origPrice=t.price?`${t.currency==='GBP'?'£':t.currency==='USDT'||t.currency==='USD'?'$':'€'}${t.price.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'—';
     const sel=selectedTradeIds.has(t.id)?'selected':'';
     const pairBadge=t.pairId?`<span class="badge badge-purple" style="font-size:10px;" title="${getPairName(t.pairId)}">pair</span>`:'';
-    return `<tr class="selectable ${sel}" onclick="toggleTradeSelect('${t.id}',event)"><td>${pairBadge}</td><td style="color:var(--text3);font-size:12px;">${t.date}</td><td><span class="badge ${isBuy?'badge-green':'badge-red'}">${isBuy?'Buy':'Sell'}</span></td><td><strong>${t.asset}</strong></td><td>${classBadge(t.class)}</td><td>${brokerTag(t.broker)}</td><td><span class="badge ${t.side==='Short'?'badge-red':'badge-green'}" style="font-size:10px;">${t.side}</span></td><td class="mono">${qty(t.qty)}</td><td class="mono">${origPrice}</td><td class="mono" style="color:var(--text3);font-size:11px;">${t.fxRate&&t.fxRate!==1?t.fxRate.toFixed(4):'—'}</td><td class="mono" style="color:var(--text3);">${t.price&&t.currency!=='GBP'?`${t.currency==='USDT'||t.currency==='USD'?'$':'€'}${(t.qty*(t.price||0)).toFixed(2)}`:'—'}</td><td class="mono">${t.valueGBP?gbp(t.valueGBP):'—'}</td><td class="mono" style="color:var(--amber);">${t.feesGBP?gbp(t.feesGBP):'—'}</td><td class="mono">${pnlCell}</td><td>${pnlPctCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();delTrade('${t.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`;
+    return `<tr class="selectable ${sel}" onclick="toggleTradeSelect('${t.id}',event)"><td>${pairBadge}</td><td style="color:var(--text3);font-size:12px;">${t.date}</td><td><span class="badge ${isBuy?'badge-green':'badge-red'}">${isBuy?'Buy':'Sell'}</span></td><td><strong>${t.asset}</strong></td><td>${classBadge(t.class)}</td><td>${brokerTag(t.broker)}</td><td><span class="badge ${t.side==='Short'?'badge-red':'badge-green'}" style="font-size:10px;">${t.side}</span></td><td class="mono">${qty(t.qty)}</td><td class="mono">${origPrice}</td><td class="mono" style="color:var(--text3);font-size:11px;">${t.fxRate&&t.fxRate!==1?t.fxRate.toFixed(4):'—'}</td><td class="mono" style="color:var(--text3);">${t.price&&t.currency!=='GBP'?`${t.currency==='USDT'||t.currency==='USD'?'$':'€'}${(t.qty*(t.price||0)).toFixed(2)}`:'—'}</td><td class="mono">${t.valueGBP?gbp(t.valueGBP):'—'}</td><td class="mono" style="color:var(--amber);">${t.feesGBP?gbp(t.feesGBP):'—'}</td><td class="mono">${pnlCell}</td><td>${pnlPctCell}</td><td style="display:flex;gap:4px;"><button class="btn btn-sm" onclick="event.stopPropagation();openEditDatetime('${t.id}')" style="padding:2px 7px;font-size:11px;" title="Editar data/hora">✏️</button><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();delTrade('${t.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`;
   }).join('')}</tbody></table>${paginationHTML}`;
 }
 
@@ -3563,6 +3582,32 @@ function sortPos(col){
   if(posSort.col===col) posSort.dir*=-1;
   else { posSort.col=col; posSort.dir=1; }
   renderPositions();
+}
+
+function openEditDatetime(id) {
+  const t = data.trades.find(t=>t.id===id);
+  if(!t) return;
+  $('edit-datetime-id').value = id;
+  $('edit-datetime-sub').textContent = `${t.type==='buy'?'Buy':'Sell'} ${t.asset} · ${t.date} · ${t.qty} units`;
+  $('edit-datetime-date').value = t.date || '';
+  $('edit-datetime-time').value = t.datetime ? t.datetime.slice(11,16) : '';
+  openModal('modal-edit-datetime');
+}
+
+function saveEditDatetime() {
+  const id = $('edit-datetime-id').value;
+  const t = data.trades.find(t=>t.id===id);
+  if(!t) return;
+  const date = $('edit-datetime-date').value;
+  const time = $('edit-datetime-time').value;
+  if(!date) { toast('Data obrigatória','error'); return; }
+  t.date = date;
+  t.datetime = time ? `${date}T${time}` : `${date}T00:00`;
+  autoMatchAll();
+  markUnsaved();
+  renderAll();
+  closeModal('modal-edit-datetime');
+  toast(`Data/hora de ${t.asset} actualizada`,'success');
 }
 
 function filterPos(f,el){posFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPositions();}
