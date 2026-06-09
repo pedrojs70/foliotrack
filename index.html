@@ -549,7 +549,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
       <div class="content">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <div class="tabs" style="margin-bottom:0;"><div class="tab active" onclick="filterTrades('all',this)">All</div><div class="tab" onclick="filterTrades('buy',this)">Buys</div><div class="tab" onclick="filterTrades('sell',this)">Sells</div><div class="tab" onclick="filterTrades('stocks',this)">Stocks &amp; ETFs</div><div class="tab" onclick="filterTrades('crypto',this)">Crypto</div></div>
+          <div class="tabs" style="margin-bottom:0;"><div class="tab active" onclick="filterTrades('all',this)">All</div><div class="tab" onclick="filterTrades('buy',this)">Buys</div><div class="tab" onclick="filterTrades('sell',this)">Sells</div><div class="tab" onclick="filterTrades('stocks',this)">Stocks &amp; ETFs</div><div class="tab" onclick="filterTrades('crypto',this)">Crypto</div><div class="tab" onclick="filterTrades('open',this)">Open</div><div class="tab" onclick="filterTrades('closed',this)">Closed</div></div>
           <div class="tabs" style="margin-bottom:0;"><div class="tab active" onclick="filterTradesSubclass('all',this)">All</div><div class="tab" onclick="filterTradesSubclass('spot',this)">Spot</div><div class="tab" onclick="filterTradesSubclass('futures',this)">Futures</div></div>
           <select id="trades-broker-filter" onchange="renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 10px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;">
             <option value="">All Brokers</option>
@@ -937,6 +937,7 @@ let data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRate
 let selectedTradeIds = new Set();
 let pendingBroker = null;
 let tradeFilterMode = 'all';
+let tradeSort = {col: 'date', dir: -1}; // default: most recent first
 let tradeSubclassFilter = 'all';
 let posFilterMode = 'all';
 let posSort = {col: 'name', dir: 1}; // col: field, dir: 1=asc, -1=desc
@@ -2642,6 +2643,22 @@ function renderTrades() {
   else if(tradeFilterMode==='sell')trades=trades.filter(t=>t.type==='sell');
   else if(tradeFilterMode==='stocks')trades=trades.filter(t=>t.class==='Stock/ETF');
   else if(tradeFilterMode==='crypto')trades=trades.filter(t=>t.class==='Crypto');
+  else if(tradeFilterMode==='open')trades=trades.filter(t=>t.type==='buy'&&t.matchedTo===null);
+  else if(tradeFilterMode==='closed')trades=trades.filter(t=>t.type==='sell'&&t.pnlGBP!=null);
+
+  // Sort trades
+  trades.sort((a,b)=>{
+    let av,bv;
+    switch(tradeSort.col){
+      case 'date': av=a.datetime||a.date+'T00:00'; bv=b.datetime||b.date+'T00:00'; break;
+      case 'asset': av=a.asset; bv=b.asset; break;
+      case 'pnl': av=a.pnlGBP??-Infinity; bv=b.pnlGBP??-Infinity; break;
+      case 'pnlpct': av=(a.pnlGBP&&a.costBasisGBP)?a.pnlGBP/a.costBasisGBP:-Infinity; bv=(b.pnlGBP&&b.costBasisGBP)?b.pnlGBP/b.costBasisGBP:-Infinity; break;
+      default: av=a.datetime||a.date; bv=b.datetime||b.date;
+    }
+    if(typeof av==='string') return tradeSort.dir*(av>bv?1:av<bv?-1:0);
+    return tradeSort.dir*(av-bv);
+  });
   // Apply subclass filter
   if(tradeSubclassFilter==='spot') trades=trades.filter(t=>(t.subclass||'Spot').toLowerCase()==='spot'||t.notes!=='Futures');
   else if(tradeSubclassFilter==='futures') trades=trades.filter(t=>t.subclass==='Futures'||t.notes==='Futures');
@@ -2683,7 +2700,9 @@ function renderTrades() {
       <button class="btn btn-secondary btn-sm" onclick="setTradesPage(${totalPages})" ${tradesPage===totalPages?'disabled':''}>»</button>
     </div>`:'';
 
-  wrap.innerHTML=`<table><thead><tr><th></th><th>Date</th><th>Type</th><th>Asset</th><th>Class</th><th>Broker</th><th>Side</th><th>Qty</th><th>Price (orig)</th><th>FX</th><th>Value (orig)</th><th>Value (GBP)</th><th>Fees (GBP)</th><th>P&L</th><th>P&L %</th><th></th></tr></thead><tbody>${paginated.map(t=>{
+  const si=(col)=>tradeSort.col===col?(tradeSort.dir===1?' ↑':' ↓'):'';
+  const tth=(col,label)=>`<th style="cursor:pointer;user-select:none;" onclick="sortTrades('${col}')">${label}${si(col)}</th>`;
+  wrap.innerHTML=`<table><thead><tr><th></th>${tth('date','Date')}<th>Type</th>${tth('asset','Asset')}<th>Class</th><th>Broker</th><th>Side</th><th>Qty</th><th>Price (orig)</th><th>FX</th><th>Value (orig)</th><th>Value (GBP)</th><th>Fees (GBP)</th>${tth('pnl','P&L')}${tth('pnlpct','P&L %')}<th></th></tr></thead><tbody>${paginated.map(t=>{
     const isBuy=t.type==='buy';
     const pnlCell=t.pnlGBP!=null?`<span class="${t.pnlGBP>=0?'pos':'neg'}">${gbp(t.pnlGBP)}</span>`:'<span style="color:var(--text3);">—</span>';
     const pnlPctCell=t.pnlGBP!=null&&t.costBasisGBP>0?`<span class="mono ${t.pnlGBP>=0?'pos':'neg'}">${t.pnlGBP>=0?'+':''}${(t.pnlGBP/t.costBasisGBP*100).toFixed(2)}%</span>`:'<span style="color:var(--text3);">—</span>';
@@ -3611,6 +3630,12 @@ function saveEditDatetime() {
 }
 
 function filterPos(f,el){posFilterMode=f;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPositions();}
+function sortTrades(col){
+  if(tradeSort.col===col) tradeSort.dir*=-1;
+  else { tradeSort.col=col; tradeSort.dir=col==='date'?-1:1; }
+  tradesPage=1; renderTrades();
+}
+
 function filterTrades(f,el){tradeFilterMode=f;tradesPage=1;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTrades();}
 function filterTradesSubclass(f,el){tradeSubclassFilter=f;tradesPage=1;el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTrades();}
 function openModal(id){$(id).classList.add('open');}
