@@ -1624,10 +1624,20 @@ function parseDateMDYFull(str) {
   // ISO format with single-digit hour: 2026-03-24 7:20:00
   const isoM2 = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{1}:\d{2})/);
   if(isoM2) return `${isoM2[1]}T0${isoM2[2]}`;
-  // US format: 5/23/25 21:05
-  const usM = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*(\d{1,2}:\d{2})?/);
+  // DD/MM/YYYY HH:MM — when year has 4 digits, treat as DD/MM/YYYY
+  const ddmmyyyy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}:\d{2})?/);
+  if(ddmmyyyy) {
+    const day = ddmmyyyy[1].padStart(2,'0');
+    const month = ddmmyyyy[2].padStart(2,'0');
+    const year = ddmmyyyy[3];
+    const timeParts = ddmmyyyy[4] ? ddmmyyyy[4].split(':') : ['00','00'];
+    const time = `${timeParts[0].padStart(2,'0')}:${timeParts[1]}`;
+    return `${year}-${month}-${day}T${time}`;
+  }
+  // MM/DD/YY (2-digit year) — US format from older exports
+  const usM = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s*(\d{1,2}:\d{2})?/);
   if(usM) {
-    const y = usM[3].length===2 ? '20'+usM[3] : usM[3];
+    const y = '20'+usM[3];
     const dateOnly = `${y}-${usM[1].padStart(2,'0')}-${usM[2].padStart(2,'0')}`;
     const timeParts = usM[4] ? usM[4].split(':') : ['00','00'];
     const time = `${timeParts[0].padStart(2,'0')}:${timeParts[1]}`;
@@ -1642,11 +1652,15 @@ function parseDateMDY(str) {
   // ISO format: 2026-01-05 13:47:01
   const isoM = s.match(/^(\d{4}-\d{2}-\d{2})/);
   if(isoM) return isoM[1];
-  // US format: 5/23/25
-  const usM = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  // DD/MM/YYYY — when year has 4 digits
+  const ddmmyyyy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(ddmmyyyy) {
+    return `${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2,'0')}-${ddmmyyyy[1].padStart(2,'0')}`;
+  }
+  // MM/DD/YY (2-digit year)
+  const usM = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})/);
   if(usM) {
-    const y = usM[3].length===2 ? '20'+usM[3] : usM[3];
-    return `${y}-${usM[1].padStart(2,'0')}-${usM[2].padStart(2,'0')}`;
+    return `20${usM[3]}-${usM[1].padStart(2,'0')}-${usM[2].padStart(2,'0')}`;
   }
   const d = new Date(str);
   if(!isNaN(d)) return d.toISOString().split('T')[0];
