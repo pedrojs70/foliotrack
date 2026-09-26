@@ -1742,6 +1742,18 @@ async function parseBrokerExcel(arrayBuffer, hint) {
       }
     }
   }
+  // No branch matched (or the hint was wrong): sniff the first sheet's
+  // headers and let the CSV parsers decide. Covers drag-and-drop.
+  if(!trades.length) {
+    for(const name of wb.SheetNames) {
+      const csv = XLSX.utils.sheet_to_csv(wb.Sheets[name]);
+      if(!csv || csv.length<20) continue;
+      let r = parseBinanceSpot(csv);
+      if(r.trades.length) { for(const t of r.trades) trades.push(t); broker='Binance'; break; }
+      r = parseCapitalCFD(csv);
+      if(r.trades.length) { for(const t of r.trades) trades.push(t); broker='Capital.com'; break; }
+    }
+  }
   return { trades, dividends, broker, error:null };
 }
 
@@ -2097,6 +2109,7 @@ async function processFile(file, hint) {
     if(fname.includes('bingx')||fname.includes('bing_x')) hint='BingX';
     else if(fname.includes('bitget') && fname.includes('futures')) hint='BitgetFutures';
     else if(fname.includes('bitget')) hint='Bitget';
+    else if(fname.includes('binance')||fname.includes('trade history')||fname.includes('trade_history')) hint='Binance';
   }
 
   // Check if file is actually Excel by magic bytes
@@ -2105,8 +2118,9 @@ async function processFile(file, hint) {
   const isPK = magic[0]===0x50&&magic[1]===0x4B; // ZIP/XLSX
   const isCFB = magic[0]===0xD0&&magic[1]===0xCF; // XLS
 
-  if((isPK||isCFB) && (hint==='BingX'||hint==='Bitget'||hint==='BitgetFutures')) {
-    // Excel file for BingX or Bitget
+  if(isPK||isCFB) {
+    // Any Excel file goes through the Excel reader; it picks the right
+    // sheet handler from the hint, and falls back to sniffing the headers.
     result = await parseBrokerExcel(ab, hint);
   } else {
     // All other files: read as text, detect by content
