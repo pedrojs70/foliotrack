@@ -536,6 +536,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
             <option value="BingX">BingX</option>
             <option value="Binance">Binance</option>
             <option value="Bybit">Bybit</option>
+            <option value="Capital.com">Capital.com</option>
           </select>
           <input type="text" id="pos-search" placeholder="Search asset..." oninput="renderPositions()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;width:180px;">
         </div>
@@ -559,6 +560,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
             <option value="BingX">BingX</option>
             <option value="Binance">Binance</option>
             <option value="Bybit">Bybit</option>
+            <option value="Capital.com">Capital.com</option>
           </select>
           <input type="text" id="trades-search" placeholder="Search asset, broker, tag..." oninput="tradesPage=1;renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;width:240px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
           </div>
@@ -620,6 +622,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
                   <option value="Bitget">Bitget</option>
                   <option value="BingX">BingX</option>
                   <option value="Binance">Binance</option>
+                  <option value="Capital.com">Capital.com</option>
                 </select>
                 <span id="pnl-period-badge" style="display:inline-flex;align-items:center;background:var(--purple-dim);border:1px solid rgba(167,139,250,0.15);color:var(--purple);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;">UK FY 25/26</span>
                 <button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
@@ -644,6 +647,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
                   <option value="Bitget">Bitget</option>
                   <option value="BingX">BingX</option>
                   <option value="Binance">Binance</option>
+                  <option value="Capital.com">Capital.com</option>
                 </select>
                 <button id="pnl-sort-btn" class="btn btn-secondary btn-sm" onclick="togglePnlSort()" title="Ordenar">P&amp;L ↓ ganhos</button>
                 <button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
@@ -712,6 +716,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
                 <option value="Bitget">Bitget</option>
                 <option value="BingX">BingX</option>
                 <option value="Binance">Binance</option>
+                <option value="Capital.com">Capital.com</option>
               </select>
               <button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
               <button class="btn btn-secondary btn-sm" onclick="exportTaxReport()">Export CSV</button>
@@ -1265,6 +1270,7 @@ function detectBroker(headers) {
   if (h.includes('pair') && h.includes('direction') && h.some(x=>x.includes('filledprice')||x.includes('avgprice')||x.includes('price'))) return 'Bitget';
   if (h.some(x=>x.includes('tradingpair')) && h.some(x=>x.includes('orderid')||x.includes('orderno'))) return 'BingX';
   if (h.includes('positionid') && h.some(x=>x.includes('openingprice'))) return 'Capital.com';
+  if (h.some(x=>x.includes('instrumentsymbol')) && h.some(x=>x.includes('rplconverted'))) return 'Capital.com';
   return null;
 }
 
@@ -1282,6 +1288,10 @@ function parseBroker(text, hint) {
   // Bitget Futures CSV detection — has Direction column with Open/Close long/short
   if(hint==='BitgetFutures' || (text.includes('Close long') || text.includes('Close short') || text.includes('Open long') || text.includes('Open short')) && text.includes('Futures')) {
     return parseBitgetFuturesCSV(text);
+  }
+  // Capital.com CFD export — detect by its distinctive column set
+  if(hint==='Capital.com' || (text.includes('Instrument Symbol') && /Rpl\s*Converted/i.test(text))) {
+    return parseCapitalCFD(text);
   }
   // BingX & Bitget: Excel files — handled separately via processFileExcel
   // For CSV brokers
@@ -1417,6 +1427,116 @@ function parseBitgetFuturesCSV(text) {
     }
   }
   return {trades,dividends:[],broker:'Bitget',error:null};
+}
+
+// ============================================================
+// Capital.com CFD export ("leveraged trades history")
+// One row per execution: USER/OPENED, USER/CLOSED, plus SYSTEM
+// rows (SWAP = overnight funding, CASH_ADJUSTMENT = daily premium,
+// i.e. the contango/backwardation roll).
+// We emit ONE trade per closed position, with P&L already net of
+// every funding cost incurred between open and close.
+// Converted columns are already in account currency (GBP).
+// ============================================================
+function parseCapitalCFD(text) {
+  const rows = parseCSV(text);
+  if(!rows.length) return {trades:[],dividends:[],broker:'Capital.com',error:'Empty file'};
+  const headers = rows[0].map(h=>(h||'').trim());
+  const norm = h => (h||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  // Header names are matched loosely so minor label changes don't break the import.
+  const col = (...cands) => {
+    for(const cand of cands){
+      const i = headers.findIndex(h=>norm(h)===cand);
+      if(i>=0) return i;
+    }
+    for(const cand of cands){
+      const i = headers.findIndex(h=>norm(h).startsWith(cand));
+      if(i>=0) return i;
+    }
+    return -1;
+  };
+  const cName=col('instrumentname','instrumentsymbol');
+  const cSym =col('instrumentsymbol','instrumentname');
+  const cQty =col('quantity');
+  const cPrice=col('price');
+  const cSrc =col('source');
+  const cStat=col('status');
+  const cRplC=col('rplconverted');
+  const cSwpC=col('swapconverted');
+  const cFee =col('fee');
+  const cTime=col('timestamputc','timestamp');
+  const cCur =col('currency');
+  if(cQty<0||cSrc<0||cStat<0||cTime<0||cPrice<0)
+    return {trades:[],dividends:[],broker:null,error:'unrecognised',headers};
+
+  const num = v => { const n=parseFloat(String(v==null?'':v).replace(/[^0-9.\-]/g,'')); return isNaN(n)?0:n; };
+  const opens=[], closes=[], costs=[];
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    if(!r||!r.length) continue;
+    const ts=(r[cTime]||'').trim();
+    if(!ts) continue;
+    const src=(r[cSrc]||'').trim().toUpperCase();
+    const st =(r[cStat]||'').trim().toUpperCase();
+    const rec={
+      name:((cName>=0?r[cName]:'')||(cSym>=0?r[cSym]:'')||'').trim(),
+      qty:num(r[cQty]), price:num(r[cPrice]),
+      rplC:cRplC>=0?num(r[cRplC]):0, swapC:cSwpC>=0?num(r[cSwpC]):0,
+      fee:cFee>=0?num(r[cFee]):0, currency:(cCur>=0?(r[cCur]||'').trim().toUpperCase():''), ts
+    };
+    if(!rec.name) continue;
+    if(src==='USER'&&st.startsWith('OPEN')) opens.push(rec);
+    else if(src==='USER'&&st.startsWith('CLOS')) closes.push(rec);
+    else if(src==='SYSTEM') costs.push(rec);
+  }
+  if(!closes.length&&!opens.length)
+    return {trades:[],dividends:[],broker:'Capital.com',error:null,trades:[],dividends:[]};
+
+  const byTime=(a,b)=>a.ts<b.ts?-1:a.ts>b.ts?1:0;
+  opens.sort(byTime); closes.sort(byTime); costs.sort(byTime);
+
+  const trades=[];
+  const usedOpen=new Set();
+  for(const cl of closes){
+    const size=Math.abs(cl.qty);
+    // Match the earliest unused opening of the same instrument and size.
+    let op=null;
+    for(let i=0;i<opens.length;i++){
+      if(usedOpen.has(i)) continue;
+      const o=opens[i];
+      if(o.name!==cl.name) continue;
+      if(Math.abs(Math.abs(o.qty)-size)>1e-9) continue;
+      if(o.ts>cl.ts) continue;
+      op=o; usedOpen.add(i); break;
+    }
+    // Funding costs for this position: same instrument, same size, between open and close.
+    let funding=0;
+    for(const k of costs){
+      if(k.name!==cl.name) continue;
+      if(Math.abs(Math.abs(k.qty)-size)>1e-9) continue;
+      if(op&&k.ts<op.ts) continue;
+      if(k.ts>cl.ts) continue;
+      funding += k.rplC + k.swapC;
+    }
+    const gross=cl.rplC;
+    const net=+(gross+funding-Math.abs(cl.fee||0)).toFixed(2);
+    const isLong = op ? op.qty>0 : cl.qty<0;
+    const date=parseDateISO(cl.ts.replace(' ','T'));
+    const datetime=(cl.ts.replace(' ','T')).substring(0,16);
+    // Price stays in the instrument's own currency so the app converts it with
+    // the date's FX rate, exactly as it does for IBKR. pnlGBP is set here from
+    // the broker's own converted figure and is never recomputed: matchedTo is
+    // 'futures' from the start, and the delete paths skip futures trades.
+    trades.push({id:genId(),type:isLong?'sell':'buy',asset:cl.name.toUpperCase(),
+      description:cl.name,broker:'Capital.com',date,datetime,qty:size,
+      price:cl.price,currency:cl.currency||'USD',priceGBP:null,valueGBP:null,fxRate:null,
+      side:isLong?'Long':'Short',leverage:1,fees:0,feesGBP:0,class:'Stock/ETF',
+      subclass:'Futures',notes:`CFD · entry ${op?op.price:'?'} · funding £${funding.toFixed(2)}`,
+      tags:['cfd'],sl:null,tp:null,matchedTo:'futures',pnlGBP:net,pairId:null,
+      _entryPrice:op?op.price:null,_fundingGBP:+funding.toFixed(2),
+      _grossPnlGBP:+gross.toFixed(2)});
+  }
+  return {trades,dividends:[],broker:'Capital.com',error:null};
 }
 
 function parseCSVLine(line) {
@@ -1844,15 +1964,10 @@ function mapTrade(obj, broker) {
 
 function parseDate(str) {
   if(!str)return today();
-  const s=String(str).trim();
-  // Only hand unambiguous ISO dates (2026-05-18) to the browser parser.
-  // Slash dates like 25/09/2026 would be read as US month-first and swapped.
-  const iso=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if(iso){const d=new Date(s);if(!isNaN(d))return `${iso[1]}-${iso[2]}-${iso[3]}`;}
-  const m=s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  const d=new Date(str);
+  if(!isNaN(d))return d.toISOString().split('T')[0];
+  const m=str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
   if(m){const y=m[3].length===2?'20'+m[3]:m[3];return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;}
-  const d2=new Date(s);
-  if(!isNaN(d2))return d2.toISOString().split('T')[0];
   return today();
 }
 
