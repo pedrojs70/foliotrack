@@ -1264,6 +1264,7 @@ function detectBroker(headers) {
   const h = headers.map(x => (x||'').toLowerCase().trim().replace(/[^a-z0-9]/g,''));
   if (h.includes('buysell') || (h.includes('symbol') && h.includes('tradeprice'))) return 'IBKR';
   if (h.includes('userid') && h.includes('utctime')) return 'Binance';
+  if (h.includes('pair') && h.includes('side') && h.includes('price') && !h.includes('userid')) return 'BinanceSpot';
   if (h.includes('type') && h.includes('asset') && h.some(x=>x.includes('walletbalance'))) return 'Bybit';
   if (h.includes('tradedate') && h.includes('reference') && h.includes('description') && h.some(x=>x.includes('unitcost'))) return 'HL';
   if (h.includes('portfoliosummary')) return 'HL'; // HL preamble
@@ -1289,6 +1290,12 @@ function parseBroker(text, hint) {
   if(hint==='BitgetFutures' || (text.includes('Close long') || text.includes('Close short') || text.includes('Open long') || text.includes('Open short')) && text.includes('Futures')) {
     return parseBitgetFuturesCSV(text);
   }
+  // Binance SPOT Trade History — has a Price column (the Transaction History
+  // export does not, which is why that path leaves price at 0).
+  if(hint==='BinanceSpot' || (/\bPair\b/.test(text) && /\bSide\b/.test(text) && /\bPrice\b/.test(text) && !text.includes('User_ID'))) {
+    const r=parseBinanceSpot(text);
+    if(r.trades.length||!r.error) return r;
+  }
   // Capital.com CFD export — detect by its distinctive column set
   if(hint==='Capital.com' || (text.includes('Instrument Symbol') && /Rpl\s*Converted/i.test(text))) {
     return parseCapitalCFD(text);
@@ -1298,7 +1305,8 @@ function parseBroker(text, hint) {
   const rows = parseCSV(text);
   if (!rows.length) return { trades:[], dividends:[], broker:null, error:'Empty file' };
   const headers = rows[0];
-  const broker = hint || detectBroker(headers);
+  let broker = hint || detectBroker(headers);
+  if(broker==='BinanceSpot') return parseBinanceSpot(text);
   if (!broker) return { trades:[], dividends:[], broker:null, error:'unrecognised', headers };
   const trades=[], dividends=[];
   // Reverse rows for Bitget CSV (newest-first in export → oldest-first for processing)
@@ -1438,6 +1446,88 @@ function parseBitgetFuturesCSV(text) {
 // every funding cost incurred between open and close.
 // Converted columns are already in account currency (GBP).
 // ============================================================
+// ============================================================
+// Binance SPOT "Trade History" export (the one WITH a price column).
+// Headers vary between exports, so they are matched loosely.
+// Numbers may carry a unit suffix (e.g. "0.00294BTC") — stripped here.
+// Spot longs only: Buy opens, Sell closes. Stablecoin/stablecoin
+// pairs (USDC/USDT) are skipped: they are conversions, not trades.
+// ============================================================
+function parseBinanceSpot(text) {
+  const rows = parseCSV(text);
+  if(!rows.length) return {trades:[],dividends:[],broker:'Binance',error:'Empty file'};
+  const headers = rows[0].map(h=>(h||'').trim());
+  const norm = h => (h||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const col = (...cands) => {
+    for(const cand of cands){ const i=headers.findIndex(h=>norm(h)===cand); if(i>=0) return i; }
+    for(const cand of cands){ const i=headers.findIndex(h=>norm(h).startsWith(cand)); if(i>=0) return i; }
+    return -1;
+  };
+  const cDate =col('dateutc','date','time','ordertime');
+  const cPair =col('pair','market','symbol');
+  const cBase =col('baseasset','base');
+  const cQuote=col('quoteasset','quote');
+  const cSide =col('type','side','direction');
+  const cPrice=col('price','averageprice','average');
+  const cQty  =col('amount','executed','filled','quantity','executedqty');
+  const cFee  =col('fee','commission');
+  const cFeeCoin=col('feecoin','feeasset','commissionasset');
+  if(cDate<0||cSide<0||cPrice<0||cQty<0||(cPair<0&&cBase<0))
+    return {trades:[],dividends:[],broker:null,error:'unrecognised',headers};
+
+  // "0.00294BTC" -> 0.00294 ; "1,234.5 USDT" -> 1234.5
+  const num = v => {
+    const m = String(v==null?'':v).replace(/,/g,'').match(/-?\d+(\.\d+)?/);
+    return m ? parseFloat(m[0]) : 0;
+  };
+  // "BTC/USDC" or "BTCUSDC" -> ['BTC','USDC']
+  const splitPair = p => {
+    const s=String(p||'').trim().toUpperCase().replace(/\s/g,'');
+    if(s.includes('/')){ const a=s.split('/'); return [a[0],a[1]||'']; }
+    for(const q of ['USDT','USDC','BUSD','FDUSD','TUSD','BTC','ETH','BNB','GBP','EUR']){
+      if(s.endsWith(q)&&s.length>q.length) return [s.slice(0,-q.length),q];
+    }
+    return [s,''];
+  };
+
+  const trades=[];
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    if(!r||!r.length) continue;
+    const rawDate=(r[cDate]||'').trim();
+    if(!rawDate) continue;
+    // Prefer the explicit Base/Quote columns; fall back to splitting the pair.
+    let base=cBase>=0?String(r[cBase]||'').trim().toUpperCase():'';
+    let quote=cQuote>=0?String(r[cQuote]||'').trim().toUpperCase():'';
+    if(!base||!quote){ const sp=splitPair(r[cPair]); base=base||sp[0]; quote=quote||sp[1]; }
+    if(!base) continue;
+    // Stablecoin-to-stablecoin conversions are not trades.
+    if(isStablecoin(base)&&isStablecoin(quote)) continue;
+    const sideRaw=(r[cSide]||'').trim().toLowerCase();
+    if(!sideRaw.includes('buy')&&!sideRaw.includes('sell')) continue;
+    const type=sideRaw.includes('sell')?'sell':'buy';
+    const qty=Math.abs(num(r[cQty]));
+    const price=Math.abs(num(r[cPrice]));
+    if(!qty||!price) continue;
+    // Date is ISO in this export (2026-09-21 13:04:51) — read it directly
+    // rather than trusting the browser parser.
+    const dm=rawDate.match(/(\d{4})-(\d{2})-(\d{2})[T ]?(\d{2})?:?(\d{2})?/);
+    const date = dm ? `${dm[1]}-${dm[2]}-${dm[3]}` : parseDate(rawDate);
+    const datetime = dm&&dm[4] ? `${dm[1]}-${dm[2]}-${dm[3]}T${dm[4]}:${dm[5]||'00'}` : date+'T00:00';
+    const currency = ['USDT','USDC','BUSD','FDUSD','TUSD'].includes(quote) ? 'USDT' : (quote||'USDT');
+    // Fee may be charged in a different coin (BNB, BTC...) — only count it
+    // when it is in the quote currency, otherwise it cannot be valued here.
+    const feeCoin=cFeeCoin>=0?String(r[cFeeCoin]||'').trim().toUpperCase():'';
+    const feeVal=cFee>=0?Math.abs(num(r[cFee])):0;
+    const feeInQuote = (feeCoin&&feeCoin===quote) ? feeVal : 0;
+    trades.push({id:genId(),type,asset:base,description:`${base}/${quote}`,broker:'Binance',
+      date,datetime,qty,price,currency,priceGBP:null,valueGBP:null,fxRate:null,
+      side:'Long',leverage:1,fees:feeInQuote,feesGBP:0,class:'Crypto',subclass:'Spot',
+      notes:'',tags:['spot'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null});
+  }
+  return {trades,dividends:[],broker:'Binance',error:null};
+}
+
 function parseCapitalCFD(text) {
   const rows = parseCSV(text);
   if(!rows.length) return {trades:[],dividends:[],broker:'Capital.com',error:'Empty file'};
@@ -1622,6 +1712,16 @@ async function parseBrokerExcel(arrayBuffer, hint) {
           trades.push(t);
         }
       }
+    }
+  }
+  else if(hint==='Binance'||hint==='BinanceSpot') {
+    broker='Binance';
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    if(sheet) {
+      // Rebuild a CSV from the sheet so the one parser serves both paths.
+      const csv = XLSX.utils.sheet_to_csv(sheet);
+      const r = parseBinanceSpot(csv);
+      for(const t of r.trades) trades.push(t);
     }
   }
   else if(hint==='BitgetFutures') {
