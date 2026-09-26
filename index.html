@@ -1844,10 +1844,15 @@ function mapTrade(obj, broker) {
 
 function parseDate(str) {
   if(!str)return today();
-  const d=new Date(str);
-  if(!isNaN(d))return d.toISOString().split('T')[0];
-  const m=str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  const s=String(str).trim();
+  // Only hand unambiguous ISO dates (2026-05-18) to the browser parser.
+  // Slash dates like 25/09/2026 would be read as US month-first and swapped.
+  const iso=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso){const d=new Date(s);if(!isNaN(d))return `${iso[1]}-${iso[2]}-${iso[3]}`;}
+  const m=s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
   if(m){const y=m[3].length===2?'20'+m[3]:m[3];return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;}
+  const d2=new Date(s);
+  if(!isNaN(d2))return d2.toISOString().split('T')[0];
   return today();
 }
 
