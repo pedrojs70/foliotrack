@@ -1521,8 +1521,11 @@ function parseCapitalCFD(text) {
     const gross=cl.rplC;
     const net=+(gross+funding-Math.abs(cl.fee||0)).toFixed(2);
     const isLong = op ? op.qty>0 : cl.qty<0;
-    const date=parseDateISO(cl.ts.replace(' ','T'));
-    const datetime=(cl.ts.replace(' ','T')).substring(0,16);
+    // Read the date straight out of the timestamp text. Relying on the browser
+    // date parser here silently fell back to "today" when the format varied.
+    const tsM=cl.ts.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    const date = tsM ? `${tsM[1]}-${tsM[2]}-${tsM[3]}` : parseDateISO(cl.ts.replace(' ','T'));
+    const datetime = tsM ? `${tsM[1]}-${tsM[2]}-${tsM[3]}T${tsM[4]}:${tsM[5]}` : date+'T00:00';
     // Price stays in the instrument's own currency so the app converts it with
     // the date's FX rate, exactly as it does for IBKR. pnlGBP is set here from
     // the broker's own converted figure and is never recomputed: matchedTo is
