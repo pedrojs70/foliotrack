@@ -1757,6 +1757,23 @@ async function parseBrokerExcel(arrayBuffer, hint) {
   return { trades, dividends, broker, error:null };
 }
 
+// BingX renamed its time column between exports (Time(UTC+8) -> Time(Europe/London)).
+// Match any header that starts with "Time"/"Date", and read the value with the
+// parser that can tell day-first from month-first.
+function bingxDate(obj) {
+  let raw='';
+  for(const k of Object.keys(obj||{})) {
+    const n=k.toLowerCase().replace(/[^a-z0-9]/g,'');
+    if(n.startsWith('time')||n.startsWith('date')||n.startsWith('createtime')||n.startsWith('updatetime')) {
+      if(obj[k]&&String(obj[k]).trim()) { raw=String(obj[k]).trim(); break; }
+    }
+  }
+  if(!raw) return today();
+  const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  return parseDateMDY(raw);
+}
+
 function mapBingXSpot(obj) {
   const type=(obj['Type']||'').trim().toLowerCase();
   if(type!=='buy'&&type!=='sell') return null;
@@ -1764,7 +1781,7 @@ function mapBingXSpot(obj) {
   const asset=pair.split('/')[0]||pair;
   const qty=Math.abs(parseFloat(obj['Amount'])||0);
   const price=parseFloat(obj['Price'])||0;
-  const date=parseDateISO(obj['Time(UTC+8)']||obj['Time']||'');
+  const date=bingxDate(obj);
   const fees=Math.abs(parseFloat(obj['Fee'])||0);
   if(!asset||!qty) return null;
   return {id:genId(),type,asset:asset.toUpperCase(),description:pair,broker:'BingX',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees,feesGBP:0,class:'Crypto',notes:'',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null};
@@ -1779,7 +1796,7 @@ function mapBingXFutures(obj) {
   const asset=pair.replace('-USDT','').replace('/USDT','');
   const qty=Math.abs(parseFloat(obj['Quantity'])||0);
   const price=parseFloat(obj['DealPrice']||obj['AvgPrice']||0);
-  const date=parseDateISO(obj['Time(UTC+8)']||obj['Time']||'');
+  const date=bingxDate(obj);
   const fees=Math.abs(parseFloat(obj['Fee'])||0);
   const pnlRaw=parseFloat(obj['Realized PNL']||obj['Realized PnL']||0);
   const leverage=parseInt(obj['Leverage'])||1;
@@ -2061,7 +2078,7 @@ function mapTrade(obj, broker) {
       asset=pair.split('/')[0]||pair;
       qty=Math.abs(parseFloat(obj['Amount']||obj['Filled Amount']||0));
       price=parseFloat(obj['Price']||obj['Avg Price']||0);
-      date=parseDateISO(obj['Time(UTC+8)']||obj['Time']||obj['Date']||'');
+      date=bingxDate(obj);
       currency='USDT';cls='Crypto';
       fees=Math.abs(parseFloat(obj['Fee']||0));
     } else if(broker==='Capital.com'){
