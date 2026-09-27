@@ -2287,7 +2287,12 @@ function autoMatchAll() {
   // Correctly handles Long FIFO, Short FIFO, partial closes, and dust residuals
   const groups={};
   data.trades.filter(t=>t.matchedTo!=='futures').forEach(t=>{
-    const k=`${(t.asset||'').trim()}__${t.broker}`;
+    // Crypto spot is pooled per asset, not per broker: coins move between
+    // exchanges and wallets, so a buy on one venue can be sold on another.
+    // Stocks/ETFs stay keyed by broker.
+    const k = (t.class!=='Stock/ETF')
+      ? (t.asset||'').trim()
+      : `${(t.asset||'').trim()}__${t.broker}`;
     if(!groups[k]) groups[k]=[];
     groups[k].push(t);
   });
@@ -2471,9 +2476,11 @@ function getPositions() {
 
   tradesToProcess.forEach(t=>{
     const asset=(t.asset||'').trim();
-    const k=`${asset}__${t.broker}`;
+    // Same rule as the matching engine: crypto spot pools per asset.
+    const isCrypto = t.class!=='Stock/ETF';
+    const k = isCrypto ? asset : `${asset}__${t.broker}`;
     if(!pos[k]) pos[k]={
-      asset, description:t.description, broker:t.broker,
+      asset, description:t.description, broker:isCrypto?'—':t.broker,
       class:t.class, subclass:t.subclass||'Spot',
       side:'Long', totalQty:0, totalCostGBP:0,
       openDate:t.date, sl:t.sl, tp:t.tp, tags:t.tags||[]
