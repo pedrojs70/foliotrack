@@ -748,6 +748,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
               </div>
               <input type="file" id="csv-input" accept=".csv,.xlsx,.xls" style="display:none;" onchange="handleFile(event)">
             </div>
+            <div id="import-date-check"></div>
             <div class="card"><div class="card-head"><div class="card-title">Import History</div></div><div id="import-history" style="padding:6px 0;"><div style="padding:14px;text-align:center;font-size:12px;color:var(--text3);">No imports yet</div></div></div>
           </div>
           <div style="display:flex;flex-direction:column;gap:12px;">
@@ -2238,6 +2239,8 @@ async function processFile(file, hint) {
   const skippedDiv = result.dividends.length - newDividends.length;
   data.imports.push({id:genId(),date:today(),broker:result.broker,filename:file.name,trades:newTrades.length,dividends:newDividends.length,skipped,status:'done'});
 
+  _lastImportCheck = checkImportDates(newTrades, file.name);
+
   // Auto-match all sells
   autoMatchAll();
   markUnsaved();
@@ -2665,10 +2668,96 @@ function checkBnB() {
 // ============================================================
 // RENDER
 // ============================================================
+// ============================================================
+// Import date sanity check — read-only. Nothing is rejected or
+// changed; the panel just reports what was read so a misparsed
+// file is visible before it gets saved.
+// ============================================================
+let _lastImportCheck = null;
+
+function checkImportDates(trades, filename) {
+  const withDate = (trades||[]).filter(t=>t && t.date);
+  if(!withDate.length) return null;
+  const dates = withDate.map(t=>t.date).sort();
+  const hoje = today();
+  // Months touched by the file. A short export spans 1-2; a misparsed one
+  // explodes because the day numbers are read as months.
+  const meses = [...new Set(dates.map(d=>d.slice(0,7)))].sort();
+  // Anchors: a day above 12 cannot be mistaken for a month, so those dates
+  // are trustworthy. Widen to whole months so legitimate days 1-12 at the
+  // edges of the file are not flagged.
+  const anc = dates.filter(d=>+d.slice(8,10) > 12);
+  let lo=null, hi=null, fora=[];
+  if(anc.length){
+    lo = anc[0].slice(0,7)+'-01';
+    hi = anc[anc.length-1].slice(0,7)+'-31';
+    fora = withDate.filter(t=>t.date < lo || t.date > hi);
+  }
+  const futuras = withDate.filter(t=>t.date > hoje);
+  const comHoje = withDate.filter(t=>t.date === hoje);
+  return {filename:filename||'', total:withDate.length, meses,
+          primeira:dates[0], ultima:dates[dates.length-1],
+          ancoras:anc.length, lo, hi,
+          fora:fora.slice(0,20), nFora:fora.length,
+          futuras:futuras.slice(0,20), nFuturas:futuras.length,
+          nHoje:comHoje.length};
+}
+
+function renderImportCheck() {
+  const el=document.getElementById('import-date-check');
+  if(!el) return;
+  const r=_lastImportCheck;
+  if(!r){ el.innerHTML=''; return; }
+  const nomeMes=m=>{
+    const [y,mo]=m.split('-');
+    return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][+mo-1]+' '+y;
+  };
+  const linha=(t)=>`<div style="font-size:12px;color:var(--text2);padding:2px 0;"><span class="mono">${t.date}</span> · <strong>${t.asset}</strong> · ${t.type} ${t.qty}</div>`;
+  const alerta = r.nFuturas>0 || r.nFora>0 || r.meses.length>3;
+  const cor = alerta?'var(--amber)':'var(--text3)';
+  let h=`<div class="card" style="margin-bottom:13px;border-color:${alerta?'var(--amber)':'var(--border)'};">
+    <div class="card-head"><div>
+      <div class="card-title" style="color:${cor};">${alerta?'&#9888; Verificar datas deste import':'Datas do último import'}</div>
+      <div class="card-sub">${r.total} trades &middot; ${r.primeira} a ${r.ultima}</div>
+    </div><button class="btn btn-secondary btn-sm" onclick="_lastImportCheck=null;renderImportCheck();">Fechar</button></div>
+    <div class="card-body" style="padding-top:0;">`;
+
+  h+=`<div style="font-size:13px;margin-bottom:10px;">
+    <strong>${r.meses.length} ${r.meses.length===1?'mês':'meses'}</strong> no ficheiro: ${r.meses.map(nomeMes).join(' &middot; ')}
+    <div style="font-size:12px;color:var(--text2);margin-top:3px;">Um export de 3 a 5 semanas toca 1 ou 2 meses. Muitos mais = datas mal lidas.</div>
+  </div>`;
+
+  if(r.nFuturas>0){
+    h+=`<div class="notice notice-warn" style="margin-bottom:8px;"><div class="notice-text">
+      <strong>${r.nFuturas} trade${r.nFuturas>1?'s':''} com data no futuro.</strong> Impossível — dia e mês trocados.
+      ${r.futuras.map(linha).join('')}</div></div>`;
+  }
+  if(r.nFora>0){
+    h+=`<div class="notice notice-warn" style="margin-bottom:8px;"><div class="notice-text">
+      <strong>${r.nFora} trade${r.nFora>1?'s':''} fora de ${nomeMes(r.lo.slice(0,7))} – ${nomeMes(r.hi.slice(0,7))}</strong>,
+      os meses das datas que não podem ser mal lidas (dia acima de 12).
+      ${r.fora.map(linha).join('')}
+      ${r.nFora>20?'<div style="font-size:12px;color:var(--text3);">(primeiras 20)</div>':''}</div></div>`;
+  }
+  if(r.ancoras===0){
+    h+=`<div class="notice notice-warn" style="margin-bottom:8px;"><div class="notice-text">
+      Nenhuma data com dia acima de 12 — não foi possível verificar o intervalo. Confere as datas à mão.</div></div>`;
+  }
+  if(r.nHoje>0){
+    h+=`<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">
+      ${r.nHoje} trade${r.nHoje>1?'s':''} com a data de hoje. Se não negociaste hoje, a data não foi encontrada no ficheiro.</div>`;
+  }
+  if(!alerta && r.ancoras>0 && r.nHoje===0){
+    h+=`<div style="font-size:12px;color:var(--green);">Nada de estranho nas datas.</div>`;
+  }
+  h+=`</div></div>`;
+  el.innerHTML=h;
+}
+
 function renderAll() {
   renderDashboard();renderPositions();renderTrades();
   renderDividends();renderPnL();renderPairs();
-  renderFees();renderTax();renderImportHistory();renderSnapshots();renderPendingMatches();renderResetPositions();
+  renderFees();renderTax();renderImportHistory();renderSnapshots();renderPendingMatches();renderResetPositions();renderImportCheck();
 }
 
 function renderDashboard() {
