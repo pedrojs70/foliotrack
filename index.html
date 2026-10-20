@@ -1521,8 +1521,9 @@ function parseBinanceSpot(text) {
     const feeCoin=cFeeCoin>=0?String(r[cFeeCoin]||'').trim().toUpperCase():'';
     const feeVal=cFee>=0?Math.abs(num(r[cFee])):0;
     const feeInQuote = (feeCoin&&feeCoin===quote) ? feeVal : 0;
+    const qtyNet=netQtyAfterFee(type, qty, price, feeVal, feeCoin, base);
     trades.push({id:genId(),type,asset:base,description:`${base}/${quote}`,broker:'Binance',
-      date,datetime,qty,price,currency,priceGBP:null,valueGBP:null,fxRate:null,
+      date,datetime,qty:qtyNet,price,currency,priceGBP:null,valueGBP:null,fxRate:null,
       side:'Long',leverage:1,fees:feeInQuote,feesGBP:0,class:'Crypto',subclass:'Spot',
       notes:'',tags:['spot'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null});
   }
@@ -1780,10 +1781,12 @@ function mapBingXSpot(obj) {
   if(type!=='buy'&&type!=='sell') return null;
   const pair=(obj['Pair']||'').trim();
   const asset=pair.split('/')[0]||pair;
-  const qty=Math.abs(parseFloat(obj['Amount'])||0);
+  let qty=Math.abs(parseFloat(obj['Amount'])||0);
   const price=parseFloat(obj['Price'])||0;
   const date=bingxDate(obj);
   const fees=Math.abs(parseFloat(obj['Fee'])||0);
+  const feeCoin=(obj['Fee Coin']||obj['FeeCoin']||obj['Fee Asset']||'').toString();
+  qty=netQtyAfterFee(type, qty, price, fees, feeCoin, asset);
   if(!asset||!qty) return null;
   return {id:genId(),type,asset:asset.toUpperCase(),description:pair,broker:'BingX',date,qty,price,currency:'USDT',priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees,feesGBP:0,class:'Crypto',notes:'',tags:[],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null};
 }
@@ -1994,6 +1997,38 @@ function parseIBKR(rows) {
   return { trades, dividends, broker:'IBKR', error:null };
 }
 
+// ============================================================
+// In-kind trading fees. Exchanges charge the spot fee in the coin
+// you just bought: you are filled 99.5157 BGB, the fee is 0.0995157
+// BGB and you actually receive 99.4161843. Recording the gross
+// amount leaves ~0.1% of every closed position behind as phantom
+// dust, which is what the Reset button was being used to hide.
+// Only BUYS are adjusted — a sell's fee is taken from the proceeds.
+// When the fee currency cannot be established, nothing is changed.
+// ============================================================
+function netQtyAfterFee(type, qty, price, fee, feeCoin, baseAsset) {
+  const q=Math.abs(+qty||0), f=Math.abs(+fee||0), px=Math.abs(+price||0);
+  if(type!=='buy' || !q || !f) return q;
+  const base=(baseAsset||'').trim().toUpperCase();
+  const moeda=(feeCoin||'').trim().toUpperCase();
+  let emEspecie=false;
+  if(moeda){
+    emEspecie = (moeda===base);          // the file says so outright
+  } else if(px>0){
+    // No fee-currency column (Bitget): decide by magnitude. A fee in the
+    // bought coin is ~0.1% of the QUANTITY; one in the quote currency is
+    // ~0.1% of the VALUE. Spot fees sit around 0.1%, so accept only when
+    // the quantity reading lands in that band and the value reading does
+    // not — a pair priced near 1, where both coincide, is left alone.
+    const rQty=f/q, rVal=f/(q*px);
+    const plausivel=x=>x>=0.0006&&x<=0.0015;
+    emEspecie = plausivel(rQty) && !plausivel(rVal);
+  }
+  if(!emEspecie) return q;
+  const net=q-f;
+  return (net>0 && net>=q*0.9) ? net : q;    // never let a fee eat the trade
+}
+
 function mapTrade(obj, broker) {
   try {
     let type,asset,description='',date,qty,price,currency,side='Long',leverage=1,fees=0,cls='Crypto';
@@ -2068,6 +2103,7 @@ function mapTrade(obj, broker) {
       currency=(['USDT','USDC','BUSD'].includes(quoteCurrency))?'USDT':quoteCurrency;
       cls='Crypto';
       fees=Math.abs(parseFloat(obj['Fee']||0));
+      qty=netQtyAfterFee(type, qty, price, fees, '', base);
       if(!qty||!price) return null;
       // Build full trade with datetime
       return {id:genId(),type,asset:asset.toUpperCase(),description:pair,broker:'Bitget',date,datetime:parseDateMDYFull(rawDateBitget),qty,price,currency,priceGBP:null,valueGBP:null,fxRate:null,side:'Long',leverage:1,fees,feesGBP:0,class:cls,subclass:'Spot',notes:'',tags:['spot'],sl:null,tp:null,matchedTo:null,pnlGBP:null,pairId:null};
