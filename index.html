@@ -2410,6 +2410,12 @@ function autoMatchAll() {
     const isStock=trades[0]?.class==='Stock/ETF';
     const longStack=[];  // {trade, remaining}
     const shortStack=[]; // {trade, remaining}
+    // Section 104 pool: how many shares are held and what they cost IN TOTAL.
+    // Deriving the cost from the original lot prices instead (as this used
+    // to) loses money: a sale is charged the pool average but the shares
+    // are taken off the oldest, cheapest lots, so the average drifts
+    // upwards and the next sale shows a loss that never happened.
+    let poolQty=0, poolCost=0;
 
     trades.forEach(t=>{
       // Skip futures trades (P&L already set from CSV)
@@ -2441,6 +2447,8 @@ function autoMatchAll() {
           t.side='Long';
           if(!t.matchedTo) t.matchedTo=null;
           longStack.push({trade:t, remaining:t.qty});
+          poolQty+=t.qty;
+          poolCost+=t.qty*(t.priceGBP||t.price||0);
         }
       } else {
         // Sell
@@ -2449,11 +2457,17 @@ function autoMatchAll() {
           t.side='Long';
           let rem=t.qty, cost=0, firstId=null;
           if(isStock){
-            // Share Pool
-            const totalQty=longStack.reduce((s,l)=>s+l.remaining,0);
-            const totalCost=longStack.reduce((s,l)=>s+l.remaining*(l.trade.priceGBP||l.trade.price||0),0);
-            cost=t.qty*(totalQty>0?totalCost/totalQty:0);
+            // Share Pool. The cost charged comes out of the pool's own
+            // running total, so what is taken out always equals what was
+            // charged and nothing evaporates between one sale and the next.
+            const media = poolQty>0 ? poolCost/poolQty : 0;
+            cost = t.qty*media;
+            poolQty = Math.max(0, poolQty - t.qty);
+            poolCost = Math.max(0, poolCost - cost);
+            if(poolQty < 0.000001) poolCost = 0;
             firstId=longStack[0].trade.id;
+            // The lots themselves only serve to record which buy each sale
+            // was matched to; the money is tracked by the pool above.
             let r=t.qty;
             for(const l of longStack){
               if(r<=0) break;
