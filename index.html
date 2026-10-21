@@ -579,7 +579,8 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
           </div>
         </div>
         <div class="notice notice-info" style="margin-bottom:12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><div class="notice-text">To create a pair: select 2+ trades by clicking on them, then click <strong>Create Pair</strong>.</div></div>
-        <div class="card"><div class="card-head"><div><div class="card-title">Trade History</div><div class="card-sub" id="trades-sub">—</div></div><div style="display:flex;gap:6px;"><button class="btn btn-secondary btn-sm" onclick="exportTradesCSV()">Export CSV</button><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div></div><div class="table-wrap" id="trades-table-wrap"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></div><div class="empty-title">No trades yet</div></div></div></div>
+        <div class="card"><div class="card-head"><div><div class="card-title">Trade History</div><div class="card-sub" id="trades-sub">—</div></div><div style="display:flex;gap:6px;"><button class="btn btn-secondary btn-sm" onclick="recalcularTudo()" title="Refaz todos os cálculos a partir das trades e mostra-te o que mudaria antes de aplicar">↻ Recalcular</button><button class="btn btn-secondary btn-sm" onclick="exportTradesCSV()">Export CSV</button><button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button></div></div><div class="table-wrap" id="trades-table-wrap"><div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></div><div class="empty-title">No trades yet</div></div></div></div>
+        <div id="sem-lucro-container" style="margin-top:16px;"></div>
         <div id="pending-matches-container" style="margin-top:16px;"></div>
       </div>
     </div>
@@ -908,6 +909,18 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
 </div>
 
 <!-- COLUMN MAP -->
+<div class="modal-overlay" id="modal-recalc">
+  <div class="modal">
+    <div class="modal-title">Recalcular</div>
+    <div class="modal-sub">Isto ainda não foi aplicado. Vê o que muda e decide.</div>
+    <div id="modal-recalc-content"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="recalcCancelar()">Cancelar</button>
+      <button class="btn" onclick="recalcAplicar()">Aplicar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-map">
   <div class="modal">
     <div class="modal-title">Column Mapping</div>
@@ -1056,6 +1069,7 @@ async function loadPortfolio(id) {
   } else {
     data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[], dismissedDivWarnings:[], tickerMap:{} };
   }
+
 }
 
 let _unsaved = false;
@@ -2304,12 +2318,47 @@ function showMapper(headers) {
 // ============================================================
 // COST BASIS — FULLY AUTOMATIC
 // ============================================================
+// ============================================================
+// ONE ordering rule for the whole app.
+// Date first. When both trades carry a real time, trust it. When they
+// do not — Hargreaves and IBKR export the date only — a buy on the
+// same day is processed before a sell: you cannot sell what you have
+// not bought yet, and HMRC matches same-day trades against each other
+// anyway. The matching engine and the positions builder both use this,
+// so they can no longer disagree about what happened first.
+// ============================================================
+function cmpTrades(a, b) {
+  const da=a.date||'', db=b.date||'';
+  if(da<db) return -1;
+  if(da>db) return 1;
+  const hoje=new Date().toISOString().split('T')[0];
+  const temHora=t=>t.datetime && !t.datetime.startsWith(hoje) && !t.datetime.endsWith('T00:00');
+  if(temHora(a)&&temHora(b)){
+    if(a.datetime<b.datetime) return -1;
+    if(a.datetime>b.datetime) return 1;
+  }
+  if(a.type==='buy'&&b.type==='sell') return -1;
+  if(a.type==='sell'&&b.type==='buy') return 1;
+  if((a.id||'')<(b.id||'')) return -1;
+  if((a.id||'')>(b.id||'')) return 1;
+  return 0;
+}
+
 function autoMatchAll() {
   // Step 1: Mark futures trades (P&L already in CSV)
   data.trades.forEach(t=>{
     if(t._rawPnlUSDT!==undefined&&t._rawPnlUSDT!==null){
       t.matchedTo='futures';
     }
+  });
+
+  // Step 1b: clear previously calculated figures, so a recalculation can
+  // never leave an old profit stuck to a row that no longer earns it.
+  // Manual matches and futures (P&L comes from the CSV) keep theirs.
+  data.trades.forEach(t=>{
+    if(t.matchedTo) return;
+    t.pnlGBP=null;
+    t.costBasisGBP=null;
   });
 
   // Step 2: Detect Long/Short using running quantity per asset+broker
@@ -2319,26 +2368,7 @@ function autoMatchAll() {
     .filter(t=>t.matchedTo!=='futures')
     .map((t,i)=>({t,i}));
 
-  withIndex.sort((a,b)=>{
-    // Sort by date first
-    if(a.t.date < b.t.date) return -1;
-    if(a.t.date > b.t.date) return 1;
-    // Same date: use datetime if available and meaningful (not today's date)
-    const today = new Date().toISOString().split('T')[0];
-    const aHasTime = a.t.datetime && !a.t.datetime.startsWith(today) && !a.t.datetime.endsWith('T00:00');
-    const bHasTime = b.t.datetime && !b.t.datetime.startsWith(today) && !b.t.datetime.endsWith('T00:00');
-    if(aHasTime && bHasTime) {
-      if(a.t.datetime < b.t.datetime) return -1;
-      if(a.t.datetime > b.t.datetime) return 1;
-    }
-    // Same date without reliable time: Buy before Sell
-    if(a.t.type==='buy' && b.t.type==='sell') return -1;
-    if(a.t.type==='sell' && b.t.type==='buy') return 1;
-    // Final tiebreaker: ID
-    if(a.t.id < b.t.id) return -1;
-    if(a.t.id > b.t.id) return 1;
-    return 0;
-  });
+  withIndex.sort((a,b)=>cmpTrades(a.t,b.t));
 
   const sorted = withIndex.map(x=>x.t);
 
@@ -2372,10 +2402,7 @@ function autoMatchAll() {
   });
 
   const today_=new Date().toISOString().split('T')[0];
-  function sortTrades(arr){
-    function normDT(t){ const dt=t.datetime||t.date+'T00:00'; return dt.replace(/T(\d):/, 'T0$1:'); }
-    return arr.sort((a,b)=>normDT(a)>normDT(b)?1:normDT(a)<normDT(b)?-1:0);
-  }
+  function sortTrades(arr){ return arr.sort(cmpTrades); }
 
   Object.values(groups).forEach(trades=>{
     sortTrades(trades);
@@ -2519,6 +2546,177 @@ function confirmMatch(sellId, val) {
 }
 
 // ============================================================
+// RECALCULATE
+// The engine skips any trade it has already matched, so a correction
+// to it can never reach what is already recorded. This clears what the
+// engine itself produced and runs it again, with the ordering rule.
+// Futures keep their P&L (it comes from the exchange's own file) and so
+// does anything confirmed by hand ("pool" / "no-buy").
+// Nothing is applied until you say so, and nothing reaches the database
+// until you press Guardar.
+// ============================================================
+let _recalcAntes = null;
+
+function _fyLabel(d){
+  const y=+String(d).substring(0,4), m=+String(d).substring(5,7);
+  const ini = m>=4 ? y : y-1;
+  return `${ini}/${String((ini+1)%100).padStart(2,'0')}`;
+}
+
+function _instantaneo(){
+  const m={};
+  data.trades.forEach(t=>{ m[t.id]={pnlGBP:t.pnlGBP??null, costBasisGBP:t.costBasisGBP??null,
+                                    matchedTo:t.matchedTo??null, side:t.side??null}; });
+  return {trades:m, pendingMatches:[...data.pendingMatches]};
+}
+
+function _repor(snap){
+  if(!snap) return;
+  data.trades.forEach(t=>{
+    const v=snap.trades[t.id]; if(!v) return;
+    t.pnlGBP=v.pnlGBP; t.costBasisGBP=v.costBasisGBP; t.matchedTo=v.matchedTo; t.side=v.side;
+  });
+  data.pendingMatches=[...snap.pendingMatches];
+}
+
+function recalcularTudo(){
+  if(!data.trades.length){ toast('Sem trades','info'); return; }
+  _recalcAntes=_instantaneo();
+
+  data.trades.forEach(t=>{
+    if(t.matchedTo==='futures'||t.matchedTo==='pool'||t.matchedTo==='no-buy') return;
+    t.matchedTo=null; t.pnlGBP=null; t.costBasisGBP=null;
+  });
+  autoMatchAll();
+
+  const antes=_recalcAntes.trades;
+  const ganharam=[], perderam=[], mudaram=[], limpas=[];
+  const fyAntes={}, fyDepois={};
+  data.trades.forEach(t=>{
+    const a = antes[t.id] ? antes[t.id].pnlGBP : null;
+    const d = t.pnlGBP;
+    if(t.type==='sell'){
+      if(a!=null) fyAntes[_fyLabel(t.date)]=(fyAntes[_fyLabel(t.date)]||0)+a;
+      if(d!=null) fyDepois[_fyLabel(t.date)]=(fyDepois[_fyLabel(t.date)]||0)+d;
+      if(a==null&&d!=null) ganharam.push({t,a,d});
+      else if(a!=null&&d==null) perderam.push({t,a,d});
+      else if(a!=null&&d!=null&&Math.abs(a-d)>0.005) mudaram.push({t,a,d});
+    } else if(a!=null&&d==null){
+      limpas.push({t,a,d});           // lucro que estava pousado numa compra
+    }
+  });
+
+  const som=arr=>arr.reduce((s,x)=>s+((x.d??0)-(x.a??0)),0);
+  const anos=[...new Set([...Object.keys(fyAntes),...Object.keys(fyDepois)])].sort();
+
+  const linha=(x,cor)=>`<tr>
+    <td style="padding:4px 6px;color:var(--text2);">${x.t.date}</td>
+    <td style="padding:4px 6px;"><strong>${x.t.asset}</strong></td>
+    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${qty(x.t.qty)}</td>
+    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${x.a==null?'—':gbp(x.a)}</td>
+    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${cor};">${x.d==null?'—':gbp(x.d)}</td></tr>`;
+
+  const tabela=(titulo,arr,cor)=>{
+    if(!arr.length) return '';
+    const mostra=arr.slice(0,12);
+    return `<div style="margin-top:14px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px;">${titulo} (${arr.length})</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <thead><tr style="color:var(--text3);"><th style="text-align:left;padding:3px 6px;">Data</th><th style="text-align:left;padding:3px 6px;">Activo</th><th style="text-align:right;padding:3px 6px;">Qty</th><th style="text-align:right;padding:3px 6px;">Antes</th><th style="text-align:right;padding:3px 6px;">Depois</th></tr></thead>
+        <tbody>${mostra.map(x=>linha(x,cor)).join('')}</tbody></table>
+      ${arr.length>mostra.length?`<div style="font-size:11px;color:var(--text3);padding:4px 6px;">… e mais ${arr.length-mostra.length}</div>`:''}
+    </div>`;
+  };
+
+  let html='';
+  if(!ganharam.length&&!perderam.length&&!mudaram.length&&!limpas.length){
+    html=`<div class="notice notice-info"><div class="notice-text">Nada muda. Os cálculos actuais já estão de acordo com o motor.</div></div>`;
+  } else {
+    html=`<table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:4px;">
+      <tr><td style="padding:5px 6px;">Vendas que passam a ter lucro registado</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:var(--green);"><strong>${ganharam.length}</strong> · ${gbp(ganharam.reduce((s,x)=>s+x.d,0))}</td></tr>
+      <tr><td style="padding:5px 6px;">Vendas cujo lucro muda de valor</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);">${mudaram.length}${mudaram.length?' · '+gbp(som(mudaram))+' de diferença':''}</td></tr>
+      <tr><td style="padding:5px 6px;">Vendas que ficam sem lucro</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:${perderam.length?'var(--red)':'var(--text3)'};">${perderam.length}</td></tr>
+      <tr><td style="padding:5px 6px;">Lucros retirados de linhas de compra</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${limpas.length}</td></tr>
+    </table>
+    <div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text);">Realizado por ano fiscal</div>
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="color:var(--text3);"><th style="text-align:left;padding:3px 6px;">Ano</th><th style="text-align:right;padding:3px 6px;">Antes</th><th style="text-align:right;padding:3px 6px;">Depois</th><th style="text-align:right;padding:3px 6px;">Diferença</th></tr></thead>
+      <tbody>${anos.map(a=>{const x=fyAntes[a]||0,y=fyDepois[a]||0;const dif=y-x;
+        return `<tr><td style="padding:4px 6px;">${a}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${gbp(x)}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${gbp(y)}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${Math.abs(dif)<0.005?'var(--text3)':dif>0?'var(--green)':'var(--red)'};">${Math.abs(dif)<0.005?'—':gbp(dif)}</td></tr>`;}).join('')}</tbody></table>`;
+    html+=tabela('Vendas que passam a ter lucro', ganharam, 'var(--green)');
+    html+=tabela('Vendas cujo lucro muda', mudaram, 'var(--text)');
+    html+=tabela('Vendas que ficam sem lucro', perderam, 'var(--red)');
+    html+=tabela('Lucros retirados de compras', limpas, 'var(--text3)');
+  }
+  $('modal-recalc-content').innerHTML=html;
+  renderAll();
+  openModal('modal-recalc');
+}
+
+function recalcAplicar(){
+  _recalcAntes=null;
+  closeModal('modal-recalc');
+  markUnsaved(); renderAll();
+  toast('Recalculado — carrega em Guardar para fixar','success');
+}
+
+function recalcCancelar(){
+  _repor(_recalcAntes); _recalcAntes=null;
+  closeModal('modal-recalc'); renderAll();
+  toast('Recálculo descartado — nada foi alterado','info');
+}
+
+// ============================================================
+// Sells carrying no profit. Some are normal (a short still open has
+// made no profit yet); others are sells the engine could not cover
+// with any buy. The reason is spelled out per row.
+// ============================================================
+function renderSemLucro(){
+  const c=$('sem-lucro-container'); if(!c) return;
+  const sells=data.trades.filter(t=>t.type==='sell'&&t.pnlGBP==null&&t.matchedTo!=='futures'&&t.notes!=='Futures');
+  if(!sells.length){ c.innerHTML=''; return; }
+
+  const motivo=t=>{
+    if(t.side==='Short') return {txt:'Short ainda aberto', cor:'var(--text3)', aviso:false};
+    if(!t.matchedTo)     return {txt:'Sem compra encontrada', cor:'var(--amber)', aviso:true};
+    return {txt:'Emparelhada mas sem valor', cor:'var(--red)', aviso:true};
+  };
+  const avisos=sells.filter(t=>motivo(t).aviso).length;
+  const total=sells.reduce((s,t)=>s+(t.valueGBP||0),0);
+
+  const porActivo={};
+  sells.forEach(t=>{ const k=(t.asset||'').trim(); (porActivo[k]=porActivo[k]||[]).push(t); });
+
+  let html=`<div class="card"><div class="card-head"><div>
+    <div class="card-title" style="color:${avisos?'var(--amber)':'var(--text)'};">${sells.length} venda${sells.length>1?'s':''} sem lucro registado</div>
+    <div class="card-sub">${avisos} a precisar de atenção · ${gbp(total)} vendidos · estas linhas não entram no relatório fiscal</div>
+    </div></div><div class="card-body" style="padding:0;">`;
+
+  Object.entries(porActivo).sort(([a],[b])=>a.localeCompare(b)).forEach(([activo,arr])=>{
+    html+=`<div style="border-bottom:1px solid var(--border);padding:10px 16px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">${activo} <span style="font-size:11px;color:var(--text3);font-weight:400;">${arr.length} venda${arr.length>1?'s':''}</span></div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;"><tbody>`;
+    arr.sort((a,b)=>a.date<b.date?-1:1).forEach(t=>{
+      const m=motivo(t);
+      html+=`<tr>
+        <td style="padding:4px 6px;color:var(--text2);">${t.date}</td>
+        <td style="padding:4px 6px;color:var(--text3);">${t.broker||'—'}</td>
+        <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${qty(t.qty)}</td>
+        <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${t.valueGBP?gbp(t.valueGBP):'—'}</td>
+        <td style="padding:4px 6px;color:${m.cor};">${m.txt}</td>
+        <td style="padding:4px 6px;text-align:right;">${m.aviso?`<button class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:11px;" onclick="confirmMatch('${t.id}','pool')" title="Calcula o custo pela média das compras deste activo até à data da venda">Casar com média</button>`:''}</td>
+      </tr>`;
+    });
+    html+=`</tbody></table></div>`;
+  });
+  html+=`</div></div>`;
+  c.innerHTML=html;
+}
+
+// ============================================================
 // COMPUTATIONS
 // ============================================================
 function getPositions() {
@@ -2543,10 +2741,7 @@ function getPositions() {
       }
       return true;
     })
-    .sort((a,b)=>{
-      function normDT(x){ const dt=x.datetime||x.date+'T00:00'; return dt.replace(/T(\d):/, 'T0$1:'); }
-      return normDT(a)>normDT(b)?1:normDT(a)<normDT(b)?-1:0;
-    });
+    .sort(cmpTrades);
 
   tradesToProcess.forEach(t=>{
     const asset=(t.asset||'').trim();
@@ -2795,7 +2990,7 @@ function renderImportCheck() {
 function renderAll() {
   renderDashboard();renderPositions();renderTrades();
   renderDividends();renderPnL();renderPairs();
-  renderFees();renderTax();renderImportHistory();renderSnapshots();renderPendingMatches();renderResetPositions();renderImportCheck();
+  renderFees();renderTax();renderImportHistory();renderSnapshots();renderSemLucro();renderPendingMatches();renderResetPositions();renderImportCheck();
 }
 
 function renderDashboard() {
@@ -4059,6 +4254,10 @@ function filterTradesSubclass(f,el){tradeSubclassFilter=f;tradesPage=1;el.closes
 function openModal(id){$(id).classList.add('open');}
 function closeModal(id){$(id).classList.remove('open');}
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+// Dismissing the recalculation window by clicking outside counts as Cancel,
+// so a half-finished recalculation is never left sitting in the app.
+(()=>{ const mr=document.getElementById('modal-recalc');
+  if(mr) mr.addEventListener('click', e=>{ if(e.target===mr && _recalcAntes) recalcCancelar(); }); })();
 
 // Normalise HL broker name — old data may have 'HL', new data has 'Hargreaves Lansdown'
 function isHL(broker) { return broker==='HL'||broker==='Hargreaves Lansdown'; }
@@ -4390,13 +4589,28 @@ async function refreshLivePrices() {
         'cake':'pancakeswap-token','1inch':'1inch','sushi':'sushi',
         'pendle':'pendle','wld':'worldcoin-wld','blur':'blur','ldo':'lido-dao',
         'wbtc':'wrapped-bitcoin','usdc':'usd-coin','busd':'binance-usd','dai':'dai',
-        'fdusd':'first-digital-usd','s':'sonic-3'
+        'fdusd':'first-digital-usd','s':'sonic-3','deep':'deepbook'
       };
       const ids=cryptoTickers.map(t=>tickerMap[t]||t).filter(Boolean).join(',');
-      // Through the Worker: CoinGecko started refusing browser requests (403).
-      const res=await fetch(`${WORKER_URL}/?crypto=${encodeURIComponent(ids)}`);
-      if(res.ok){
-        const d=await res.json();
+      // Ask CoinGecko directly first: from your own browser it is rarely
+      // limited. The Worker shares an address with thousands of other
+      // sites, so CoinGecko throttles it and replies with the word
+      // "Throttled" instead of data — which is why every crypto price
+      // vanished at once. Worker stays as a fallback for when the direct
+      // call is blocked.
+      async function pedirCripto(url){
+        try{
+          const r=await fetch(url);
+          if(!r.ok) return null;
+          const txt=await r.text();
+          if(!txt||txt.trim()[0]!=='{') return null;   // "Throttled" & co.
+          const j=JSON.parse(txt);
+          return (j&&Object.keys(j).length)?j:null;
+        }catch(e){ return null; }
+      }
+      let d=await pedirCripto(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
+      if(!d) d=await pedirCripto(`${WORKER_URL}/?crypto=${encodeURIComponent(ids)}`);
+      if(d){
         cryptoTickers.forEach(ticker=>{
           const id=tickerMap[ticker]||ticker;
           if(d[id]?.usd){livePrices[ticker.toUpperCase()]={price:d[id].usd,source:'coingecko'};fetched++;}
