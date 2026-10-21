@@ -2880,9 +2880,9 @@ function monthlyPnL(classFilter, brokerFilter) {
     return true;
   }).forEach(t=>{
     const k=t.date.substring(0,7);
-    if(!m[k]) m[k]={pnl:0,n:0,long:0,longN:0,short:0,shortN:0};
+    if(!m[k]) m[k]={pnl:0,n:0,long:0,longN:0,short:0,shortN:0,trades:[]};
     const v=t.pnlGBP||0;
-    m[k].pnl+=v; m[k].n++;
+    m[k].pnl+=v; m[k].n++; m[k].trades.push(t);
     // A line carrying a profit IS one closed operation: the sale when the
     // position was bought first, the repurchase when it was sold first.
     // So counting these lines counts trades, with no double counting.
@@ -3421,6 +3421,10 @@ function renderDividends() {
   wrap.innerHTML=warningHtml+`<table><thead><tr><th>Date</th><th>Asset</th><th>Broker</th><th>Gross (orig)</th><th>WHT</th><th>Net (GBP)</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+// Which month is expanded in the Monthly P&L table, if any.
+let _mesAberto = null;
+function toggleMes(k){ _mesAberto = (_mesAberto===k ? null : k); renderPnL(); }
+
 function renderPnL() {
   const {from,to}=getFilterDates();
   const rFiltered=realisedFiltered();
@@ -3460,12 +3464,33 @@ function renderPnL() {
       cumulative+=v.pnl;
       const parts=m.split('-');
       const lbl=parts.length>=2?`${months[parseInt(parts[1])-1]} ${parts[0]}`:`${m}`;
-      return `<tr>
-        <td style="color:var(--text3);font-size:13px;">${lbl}</td>
+      const aberto = _mesAberto===m;
+      let linha = `<tr onclick="toggleMes('${m}')" style="cursor:pointer;${aberto?'background:var(--bg3);':''}" title="Ver as trades fechadas deste mês">
+        <td style="color:var(--text3);font-size:13px;"><span style="display:inline-block;width:10px;color:var(--text3);">${aberto?'\u25be':'\u25b8'}</span> ${lbl}</td>
         <td class="mono" style="text-align:right;color:var(--text2);">${v.n}</td>
         <td class="mono ${v.pnl>=0?'pos':'neg'}" style="text-align:right;">${gbp(v.pnl)}</td>
         <td class="mono ${cumulative>=0?'pos':'neg'}" style="text-align:right;opacity:0.7;">${gbp(cumulative)}</td>
       </tr>`;
+      if(aberto){
+        const det=[...v.trades].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0).map(t=>{
+          // A profit on a buy means the position was sold first: a short.
+          const curto = t.type==='buy';
+          return `<tr style="background:var(--bg3);">
+            <td style="padding:3px 6px 3px 20px;font-size:11px;color:var(--text3);">${t.date.slice(8,10)}/${t.date.slice(5,7)}</td>
+            <td colspan="2" style="padding:3px 6px;font-size:11px;">
+              <strong style="font-weight:600;">${(t.asset||'').length>26?(t.asset||'').slice(0,26)+'\u2026':(t.asset||'')}</strong>
+              <span class="badge ${curto?'badge-red':'badge-green'}" style="font-size:9px;margin-left:5px;">${curto?'Short':'Long'}</span>
+            </td>
+            <td class="mono ${t.pnlGBP>=0?'pos':'neg'}" style="padding:3px 6px;text-align:right;font-size:11px;">${gbp(t.pnlGBP)}</td>
+          </tr>`;
+        }).join('');
+        linha += `<tr style="background:var(--bg3);"><td colspan="4" style="padding:5px 6px 5px 20px;font-size:11px;color:var(--text2);border-top:1px dashed var(--border);">
+            Long <strong>${v.longN}</strong> ${v.longN===1?'trade':'trades'} <span class="${v.long>=0?'pos':'neg'}">${gbp(v.long)}</span>
+            &nbsp;\u00b7&nbsp;
+            Short <strong>${v.shortN}</strong> ${v.shortN===1?'trade':'trades'} <span class="${v.short>=0?'pos':'neg'}">${gbp(v.short)}</span>
+          </td></tr>` + det;
+      }
+      return linha;
     }).join('');
     monthlyEl.innerHTML=`<table>
       <thead><tr><th>Month</th><th style="text-align:right;">Trades</th><th style="text-align:right;">P&amp;L</th><th style="text-align:right;">Cumulative</th></tr></thead>
