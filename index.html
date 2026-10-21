@@ -4633,7 +4633,39 @@ async function refreshLivePrices() {
           // Stored in USD: the positions screen converts crypto to GBP itself.
           livePrices[tk.toUpperCase()]={price:meta.regularMarketPrice, source:'yahoo'};
           fetched++;
-        } else porFazer.push(tk);
+        } else {
+          // Yahoo numbers the symbols of newer coins (SUI, DEEP and
+          // others), so a plain SYMBOL-USD misses them. Ask the Worker to
+          // search, take the first crypto result, and remember it so this
+          // happens once per coin.
+          const chave='crypto::'+String(tk).toUpperCase();
+          let alt = data.tickerMap && (chave in data.tickerMap) ? data.tickerMap[chave].ticker : undefined;
+          if(alt===undefined){
+            alt=null;
+            try{
+              const s=await fetch(`${WORKER_URL}/?search=${encodeURIComponent(tk)}`)
+                        .then(r=>r.ok?r.json():null);
+              const hit=(s?.quotes||[]).find(x=>
+                String(x.quoteType||'').toUpperCase()==='CRYPTOCURRENCY' &&
+                String(x.symbol||'').toUpperCase().endsWith('-USD'));
+              if(hit) alt=hit.symbol;
+            }catch(e){}
+            if(!data.tickerMap) data.tickerMap={};
+            data.tickerMap[chave]={ticker:alt, at:today()};
+            markUnsaved();
+          }
+          let feito=false;
+          if(alt){
+            const q2=await fetch(`${WORKER_URL}/?ticker=${encodeURIComponent(alt)}`)
+                      .then(r=>r.ok?r.json():null).catch(()=>null);
+            const m2=q2?.chart?.result?.[0]?.meta;
+            if(m2?.regularMarketPrice){
+              livePrices[tk.toUpperCase()]={price:m2.regularMarketPrice, source:'yahoo'};
+              fetched++; feito=true;
+            }
+          }
+          if(!feito) porFazer.push(tk);
+        }
         await new Promise(r=>setTimeout(r,120));
       }
 
@@ -4665,6 +4697,11 @@ async function refreshLivePrices() {
 
   // HL full name → LSE ticker mapping
   const hlNameToYahoo = {
+    'Helium One Global Ltd NPV (DI)': 'HE1.L',
+    'iShares III Plc Blockchain Technology UCITS ETF USD Cap': 'BLKC.L',
+    'VanEck UCITS ETFs plc Crypto & Blockchain Innovators UCITS ETF Class A': 'DAGB.L',
+    'VanEck UCITS ETFs Plc VanEck Defense UCITS ETF A USD Acc': 'DFNG.L',
+    'WisdomTree Natural Gas (GBP)': 'NGSP.L',
     'iShares Physical Metals plc Physical Gold ETC': 'SGLN.L',
     'iShares Physical Metals plc Physical Silver ETC': 'SSLN.L',
     'iShares Physical Metals plc Physical Platinum ETC': 'SPLT.L',
