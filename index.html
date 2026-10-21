@@ -4596,29 +4596,44 @@ async function refreshLivePrices() {
         'wbtc':'wrapped-bitcoin','usdc':'usd-coin','busd':'binance-usd','dai':'dai',
         'fdusd':'first-digital-usd','s':'sonic-3','deep':'deepbook'
       };
-      const ids=cryptoTickers.map(t=>tickerMap[t]||t).filter(Boolean).join(',');
-      // Ask CoinGecko directly first: from your own browser it is rarely
-      // limited. The Worker shares an address with thousands of other
-      // sites, so CoinGecko throttles it and replies with the word
-      // "Throttled" instead of data — which is why every crypto price
-      // vanished at once. Worker stays as a fallback for when the direct
-      // call is blocked.
-      async function pedirCripto(url){
-        try{
-          const r=await fetch(url);
-          if(!r.ok) return null;
-          const txt=await r.text();
-          if(!txt||txt.trim()[0]!=='{') return null;   // "Throttled" & co.
-          const j=JSON.parse(txt);
-          return (j&&Object.keys(j).length)?j:null;
-        }catch(e){ return null; }
+      // Yahoo first, one coin at a time, through the Worker.
+      // CoinGecko refuses browser requests outright (CORS) and rate-limits
+      // the Worker, whose address is shared with thousands of other sites.
+      // Worse, it reports that limit as a 200 whose body is an error
+      // object — valid JSON carrying no prices, which is how every crypto
+      // price went missing without a single error showing up.
+      const porFazer=[];
+      for(const tk of cryptoTickers){
+        const sym=String(tk).toUpperCase()+'-USD';
+        const q=await fetch(`${WORKER_URL}/?ticker=${encodeURIComponent(sym)}`)
+                  .then(r=>r.ok?r.json():null).catch(()=>null);
+        const meta=q?.chart?.result?.[0]?.meta;
+        if(meta?.regularMarketPrice && String(meta.currency||'USD').toUpperCase()==='USD'){
+          // Stored in USD: the positions screen converts crypto to GBP itself.
+          livePrices[tk.toUpperCase()]={price:meta.regularMarketPrice, source:'yahoo'};
+          fetched++;
+        } else porFazer.push(tk);
+        await new Promise(r=>setTimeout(r,120));
       }
-      let d=await pedirCripto(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
-      if(!d) d=await pedirCripto(`${WORKER_URL}/?crypto=${encodeURIComponent(ids)}`);
-      if(d){
-        cryptoTickers.forEach(ticker=>{
-          const id=tickerMap[ticker]||ticker;
-          if(d[id]?.usd){livePrices[ticker.toUpperCase()]={price:d[id].usd,source:'coingecko'};fetched++;}
+
+      // Anything Yahoo does not list falls back to CoinGecko, in one call.
+      if(porFazer.length){
+        const ids=porFazer.map(t=>tickerMap[t]||t).filter(Boolean).join(',');
+        let d=null;
+        try{
+          const r=await fetch(`${WORKER_URL}/?crypto=${encodeURIComponent(ids)}`);
+          if(r.ok){
+            const txt=await r.text();
+            if(txt && txt.trim()[0]==='{'){
+              const j=JSON.parse(txt);
+              // A rate limit arrives as a 200 with status.error_code set.
+              if(j && !j.status?.error_code && Object.keys(j).length) d=j;
+            }
+          }
+        }catch(e){}
+        if(d) porFazer.forEach(tk=>{
+          const id=tickerMap[tk]||tk;
+          if(d[id]?.usd){ livePrices[tk.toUpperCase()]={price:d[id].usd, source:'coingecko'}; fetched++; }
         });
       }
     } catch(e){}
