@@ -939,7 +939,7 @@ const db = firebase.firestore();
 // ============================================================
 let portfolios = [{ id: 'main', name: 'Main Portfolio' }];
 let currentPortfolioId = 'main';
-let data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[], dismissedDivWarnings:[] };
+let data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[], dismissedDivWarnings:[], tickerMap:{} };
 let selectedTradeIds = new Set();
 let pendingBroker = null;
 let tradeFilterMode = 'all';
@@ -1007,6 +1007,7 @@ async function loadPortfolio(id) {
     data.pendingMatches = d.pendingMatches || [];
     data.resetPositions = d.resetPositions || [];
     data.dismissedDivWarnings = d.dismissedDivWarnings || [];
+    data.tickerMap = d.tickerMap || {};
 
     const totalChunks = d.tradeChunks || 0;
 
@@ -1053,7 +1054,7 @@ async function loadPortfolio(id) {
       data.trades = [];
     }
   } else {
-    data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[], dismissedDivWarnings:[] };
+    data = { trades:[], dividends:[], imports:[], snapshots:[], pairs:[], fxRates:{}, pendingMatches:[], resetPositions:[], dismissedDivWarnings:[], tickerMap:{} };
   }
 }
 
@@ -1127,6 +1128,7 @@ async function save() {
       pendingMatches: data.pendingMatches,
       resetPositions: data.resetPositions||[],
       dismissedDivWarnings: data.dismissedDivWarnings||[],
+      tickerMap: data.tickerMap||{},
       updatedAt: new Date().toISOString()
     });
     await db.collection('foliotrack').doc('portfolios').set({ list: portfolios });
@@ -4250,6 +4252,96 @@ async function recalcFxRates() {
 // Live prices cache
 let livePrices = {};
 
+// ============================================================
+// One quote primitive for every stock path. The currency comes from
+// Yahoo's own response (meta.currency), not from a hand-written table:
+// London lists some stocks in pence ("GBp") and others in pounds
+// ("GBP"), and guessing wrong moves the price by a factor of 100.
+// Returns the price already converted to GBP.
+// ============================================================
+const WORKER_URL = 'https://foliotrack-prices.pedrojs70.workers.dev';
+
+async function fetchQuote(ticker) {
+  try {
+    const r = await fetch(`${WORKER_URL}/?ticker=${encodeURIComponent(ticker)}`);
+    if(!r.ok) return null;
+    const d = await r.json();
+    const meta = d?.chart?.result?.[0]?.meta;
+    const px = meta?.regularMarketPrice;
+    if(!px) return null;
+    const cur = (meta.currency||'').trim();
+    let gbp = px;
+    if(cur==='GBp') gbp = px/100;                                   // pence
+    else if(cur==='GBP') gbp = px;
+    else if(cur==='USD') gbp = px*(livePrices['__USDGBP__']||0.79);
+    else if(cur==='EUR') gbp = px*(livePrices['__EURGBP__']||0.86);
+    else if(cur==='AUD') gbp = px*(livePrices['__AUDGBP__']||0.53);
+    else return null;                                               // currency we cannot convert
+    return {gbp, raw:px, currency:cur, ticker};
+  } catch(e){ return null; }
+}
+
+// The currency this position was actually traded in — the key to telling
+// three listings of the same company apart.
+function tradeCurrency(p) {
+  const t=data.trades.filter(x=>x.asset===p.asset
+    && normBroker(x.broker)===normBroker(p.broker) && x.currency);
+  if(!t.length) return '';
+  const n={};
+  t.forEach(x=>{const k=(x.currency||'').toUpperCase(); n[k]=(n[k]||0)+1;});
+  return Object.entries(n).sort((a,b)=>b[1]-a[1])[0][0];
+}
+
+async function searchYahooSymbols(p) {
+  const limpa=s=>String(s||'').replace(/\s+(Ord|Ordinary|ORD)\b.*$/i,'')
+                               .replace(/\s+(plc|PLC|Plc|Inc|Corp|Ltd|N\.V\.)\b/g,'').trim();
+  const termos=[p.asset, limpa(p.asset), limpa(p.description)]
+    .filter((v,i,a)=>v && a.indexOf(v)===i);
+  const vistos=new Set(), out=[];
+  for(const q of termos){
+    try{
+      const r=await fetch(`${WORKER_URL}/?search=${encodeURIComponent(q)}`);
+      if(!r.ok) continue;
+      const d=await r.json();
+      for(const it of (d.quotes||[])){
+        const tipo=(it.quoteType||'').toUpperCase();
+        if(tipo!=='EQUITY'&&tipo!=='ETF') continue;
+        if(it.symbol&&!vistos.has(it.symbol)){ vistos.add(it.symbol); out.push(it.symbol); }
+      }
+    }catch(e){}
+    if(out.length) break;
+  }
+  return out.slice(0,6);
+}
+
+// Finds the Yahoo symbol for a position no hand-written table covers.
+// Candidates are filtered by the currency of your own trades, so the
+// Amsterdam, London and New York listings of one company are not mixed up.
+// The answer is remembered, so each asset is searched once.
+async function resolveUnknownTicker(p) {
+  const chave=`${normBroker(p.broker)}::${p.asset}`;
+  if(!data.tickerMap) data.tickerMap={};
+  const guardado=data.tickerMap[chave];
+  if(guardado) return guardado.ticker||null;
+  const moeda=tradeCurrency(p);
+  const cands=await searchYahooSymbols(p);
+  for(const s of cands){
+    const q=await fetchQuote(s);
+    if(q){
+      const cur = q.currency==='GBp' ? 'GBP' : q.currency;
+      if(!moeda || cur===moeda){
+        data.tickerMap[chave]={ticker:s, currency:q.currency, at:today()};
+        markUnsaved();
+        return s;
+      }
+    }
+    await new Promise(r=>setTimeout(r,120));
+  }
+  data.tickerMap[chave]={ticker:null, at:today()};   // remember the miss
+  markUnsaved();
+  return null;
+}
+
 async function refreshLivePrices() {
   const btn=$('btn-refresh-prices');
   const status=$('prices-status');
@@ -4301,7 +4393,8 @@ async function refreshLivePrices() {
         'fdusd':'first-digital-usd','s':'sonic-3'
       };
       const ids=cryptoTickers.map(t=>tickerMap[t]||t).filter(Boolean).join(',');
-      const res=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
+      // Through the Worker: CoinGecko started refusing browser requests (403).
+      const res=await fetch(`${WORKER_URL}/?crypto=${encodeURIComponent(ids)}`);
       if(res.ok){
         const d=await res.json();
         cryptoTickers.forEach(ticker=>{
@@ -4314,7 +4407,6 @@ async function refreshLivePrices() {
   if(status) status.textContent=`${fetched} crypto prices fetched, loading stocks...`;
 
   const TWELVE_DATA_KEY = 'f6a53700d8c9439a86c3728a4822c862';
-  const WORKER_URL = 'https://foliotrack-prices.pedrojs70.workers.dev';
 
   // HL full name → LSE ticker mapping
   const hlNameToYahoo = {
@@ -4386,8 +4478,8 @@ async function refreshLivePrices() {
       const yahooTicker = hlNameToYahoo[p.asset];
       if(!yahooTicker) continue;
       try {
-        const price = await fetchYahooWorker(yahooTicker);
-        if(price) { livePrices[p.asset]={price,source:'yahoo',currency:'GBP'}; fetched++; }
+        const q = await fetchQuote(yahooTicker);
+        if(q) { livePrices[p.asset]={price:q.gbp, rawPrice:q.raw, source:'yahoo', currency:'GBP'}; fetched++; }
       } catch(e) {}
       await new Promise(r=>setTimeout(r,200));
 
@@ -4408,14 +4500,9 @@ async function refreshLivePrices() {
     const mapped = ibkrYahooMap[p.asset];
     if(!mapped) continue;
     try {
-      const price = await fetchYahooWorker(mapped.ticker, mapped.currency);
-      if(price) {
-        const cur = mapped.currency;
-        let gbpPrice = price;
-        if(cur === 'EUR') gbpPrice = price * (livePrices['__EURGBP__'] || 0.86);
-        else if(cur === 'USD') gbpPrice = price * (livePrices['__USDGBP__'] || 0.79);
-        else if(cur === 'AUD') gbpPrice = price * (livePrices['__AUDGBP__'] || 0.53);
-        livePrices[p.asset]={price:gbpPrice, rawPrice:price, source:'yahoo', currency:'GBP'};
+      const q = await fetchQuote(mapped.ticker);
+      if(q) {
+        livePrices[p.asset]={price:q.gbp, rawPrice:q.raw, source:'yahoo', currency:'GBP'};
         fetched++;
       }
     } catch(e) {}
@@ -4426,20 +4513,33 @@ async function refreshLivePrices() {
   // Fetch US stocks via Cloudflare Worker → Yahoo Finance (no rate limit)
   for(const p of usAssets) {
     try {
-      const res = await fetch(`${WORKER_URL}/?ticker=${p.asset}`);
-      if(res.ok) {
-        const d = await res.json();
-        const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
-        if(price) {
-          livePrices[p.asset]={price, source:'yahoo', currency:'USD'};
-          fetched++;
-        }
+      const q = await fetchQuote(p.asset);
+      if(q) {
+        livePrices[p.asset]={price:q.gbp, rawPrice:q.raw, source:'yahoo', currency:'GBP'};
+        fetched++;
       }
     } catch(e) {}
     await new Promise(r=>setTimeout(r,150));
   }
 
-  if(status) status.textContent=`${fetched} prices updated · 15min delay`;
+  // Anything still without a price has no entry in the hand-written tables.
+  // Look it up on Yahoo, pick the listing whose currency matches the trade,
+  // and remember it so this only happens once per asset.
+  const semPreco = stockPositions.filter(p=>!livePrices[p.asset]);
+  if(semPreco.length && status) status.textContent=`${fetched} prices · looking up ${semPreco.length} new…`;
+  let novos=0;
+  for(const p of semPreco){
+    try{
+      const t=await resolveUnknownTicker(p);
+      if(!t) continue;
+      const q=await fetchQuote(t);
+      if(q){ livePrices[p.asset]={price:q.gbp, rawPrice:q.raw, source:'yahoo', currency:'GBP'};
+             fetched++; novos++; }
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,150));
+  }
+
+  if(status) status.textContent=`${fetched} prices updated${novos?` · ${novos} new symbol${novos>1?'s':''} found`:''} · 15min delay`;
   if(btn) btn.disabled=false;
   renderPositions();
 }
