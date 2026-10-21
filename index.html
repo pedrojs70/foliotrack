@@ -2572,10 +2572,6 @@ function confirmMatch(sellId, val) {
 // ============================================================
 let _recalcAntes = null;
 
-// gbp() prints the absolute value, which is fine where a colour carries the
-// sign. In this window a loss must read as a loss, so this one keeps it.
-function gbpS(n){ const v=n||0; return (v<0?'-':'')+gbp(v); }
-
 // On a short the sale comes first, so the closing BUY is the row carrying
 // the gain: what it cost to buy back is the cost basis, and the proceeds
 // are what the earlier sale brought in — cost plus the gain. An ordinary
@@ -2639,8 +2635,8 @@ function recalcularTudo(){
     <td style="padding:4px 6px;color:var(--text2);">${x.t.date}</td>
     <td style="padding:4px 6px;"><strong>${x.t.asset}</strong></td>
     <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${qty(x.t.qty)}</td>
-    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${x.a==null?'—':gbpS(x.a)}</td>
-    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${cor};">${x.d==null?'—':gbpS(x.d)}</td></tr>`;
+    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${x.a==null?'—':gbp(x.a)}</td>
+    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${cor};">${x.d==null?'—':gbp(x.d)}</td></tr>`;
 
   const tabela=(titulo,arr,cor)=>{
     if(!arr.length) return '';
@@ -2659,8 +2655,8 @@ function recalcularTudo(){
     html=`<div class="notice notice-info"><div class="notice-text">Nada muda. Os cálculos actuais já estão de acordo com o motor.</div></div>`;
   } else {
     html=`<table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:4px;">
-      <tr><td style="padding:5px 6px;">Vendas que passam a ter lucro registado</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:var(--green);"><strong>${ganharam.length}</strong> · ${gbpS(ganharam.reduce((s,x)=>s+x.d,0))}</td></tr>
-      <tr><td style="padding:5px 6px;">Vendas cujo lucro muda de valor</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);">${mudaram.length}${mudaram.length?' · '+gbpS(som(mudaram))+' de diferença':''}</td></tr>
+      <tr><td style="padding:5px 6px;">Vendas que passam a ter lucro registado</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:var(--green);"><strong>${ganharam.length}</strong> · ${gbp(ganharam.reduce((s,x)=>s+x.d,0))}</td></tr>
+      <tr><td style="padding:5px 6px;">Vendas cujo lucro muda de valor</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);">${mudaram.length}${mudaram.length?' · '+gbp(som(mudaram))+' de diferença':''}</td></tr>
       <tr><td style="padding:5px 6px;">Vendas que ficam sem lucro</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:${perderam.length?'var(--red)':'var(--text3)'};">${perderam.length}</td></tr>
       <tr><td style="padding:5px 6px;">Lucros retirados de linhas de compra</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${limpas.length}</td></tr>
     </table>
@@ -2669,9 +2665,9 @@ function recalcularTudo(){
       <thead><tr style="color:var(--text3);"><th style="text-align:left;padding:3px 6px;">Ano</th><th style="text-align:right;padding:3px 6px;">Antes</th><th style="text-align:right;padding:3px 6px;">Depois</th><th style="text-align:right;padding:3px 6px;">Diferença</th></tr></thead>
       <tbody>${anos.map(a=>{const x=fyAntes[a]||0,y=fyDepois[a]||0;const dif=y-x;
         return `<tr><td style="padding:4px 6px;">${a}</td>
-          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${gbpS(x)}</td>
-          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${gbpS(y)}</td>
-          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${Math.abs(dif)<0.005?'var(--text3)':dif>0?'var(--green)':'var(--red)'};">${Math.abs(dif)<0.005?'—':gbpS(dif)}</td></tr>`;}).join('')}</tbody></table>`;
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${gbp(x)}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${gbp(y)}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${Math.abs(dif)<0.005?'var(--text3)':dif>0?'var(--green)':'var(--red)'};">${Math.abs(dif)<0.005?'—':gbp(dif)}</td></tr>`;}).join('')}</tbody></table>`;
     html+=tabela('Vendas que passam a ter lucro', ganharam, 'var(--green)');
     html+=tabela('Vendas cujo lucro muda', mudaram, 'var(--text)');
     html+=tabela('Vendas que ficam sem lucro', perderam, 'var(--red)');
@@ -2884,7 +2880,14 @@ function monthlyPnL(classFilter, brokerFilter) {
     return true;
   }).forEach(t=>{
     const k=t.date.substring(0,7);
-    m[k]=(m[k]||0)+(t.pnlGBP||0);
+    if(!m[k]) m[k]={pnl:0,n:0,long:0,longN:0,short:0,shortN:0};
+    const v=t.pnlGBP||0;
+    m[k].pnl+=v; m[k].n++;
+    // A line carrying a profit IS one closed operation: the sale when the
+    // position was bought first, the repurchase when it was sold first.
+    // So counting these lines counts trades, with no double counting.
+    if(t.type==='buy'){ m[k].short+=v; m[k].shortN++; }
+    else               { m[k].long +=v; m[k].longN++;  }
   });
   return m;
 }
@@ -3140,7 +3143,7 @@ function renderDashboard() {
       <tbody>${entries.map(([m,v])=>{
         const parts=m.split('-');
         const lbl=parts.length>=2?`${months[parseInt(parts[1])-1]} ${parts[0]}`:m;
-        return `<tr><td style="color:var(--text3);">${lbl}</td><td class="mono ${v>=0?'pos':'neg'}" style="text-align:right;">${gbp(v)}</td></tr>`;
+        return `<tr><td style="color:var(--text3);">${lbl}</td><td class="mono ${v.pnl>=0?'pos':'neg'}" style="text-align:right;">${gbp(v.pnl)}</td></tr>`;
       }).join('')}</tbody>
     </table>`;
   }
@@ -3441,7 +3444,11 @@ function renderPnL() {
   const monthlyClassFilter=$('pnl-monthly-class-filter')?.value||'';
   const monthlyBrokerFilter=$('pnl-monthly-broker-filter')?.value||'';
   const monthly=monthlyPnL(monthlyClassFilter, monthlyBrokerFilter);
-  const monthlyTotal=Object.values(monthly).reduce((s,v)=>s+v,0);
+  const mv=Object.values(monthly);
+  const monthlyTotal=mv.reduce((s,v)=>s+v.pnl,0);
+  const totN   =mv.reduce((s,v)=>s+v.n,0);
+  const totLong=mv.reduce((s,v)=>s+v.long,0),  totLongN =mv.reduce((s,v)=>s+v.longN,0);
+  const totShort=mv.reduce((s,v)=>s+v.short,0), totShortN=mv.reduce((s,v)=>s+v.shortN,0);
   const monthlyEl=$('pnl-monthly-table');
   if(!Object.keys(monthly).length){
     monthlyEl.innerHTML='<div style="padding:18px;text-align:center;font-size:12px;color:var(--text3);">No closed trades in this period</div>';
@@ -3450,23 +3457,35 @@ function renderPnL() {
     const entries=Object.entries(monthly).sort();
     let cumulative=0;
     const rows=entries.map(([m,v])=>{
-      cumulative+=v;
+      cumulative+=v.pnl;
       const parts=m.split('-');
       const lbl=parts.length>=2?`${months[parseInt(parts[1])-1]} ${parts[0]}`:`${m}`;
       return `<tr>
         <td style="color:var(--text3);font-size:13px;">${lbl}</td>
-        <td class="mono ${v>=0?'pos':'neg'}" style="text-align:right;">${gbp(v)}</td>
+        <td class="mono" style="text-align:right;color:var(--text2);">${v.n}</td>
+        <td class="mono ${v.pnl>=0?'pos':'neg'}" style="text-align:right;">${gbp(v.pnl)}</td>
         <td class="mono ${cumulative>=0?'pos':'neg'}" style="text-align:right;opacity:0.7;">${gbp(cumulative)}</td>
       </tr>`;
     }).join('');
     monthlyEl.innerHTML=`<table>
-      <thead><tr><th>Month</th><th style="text-align:right;">P&amp;L</th><th style="text-align:right;">Cumulative</th></tr></thead>
+      <thead><tr><th>Month</th><th style="text-align:right;">Trades</th><th style="text-align:right;">P&amp;L</th><th style="text-align:right;">Cumulative</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr style="border-top:1px solid var(--border2);">
-        <td style="font-weight:600;padding-top:8px;">Total</td>
-        <td class="mono ${monthlyTotal>=0?'pos':'neg'}" style="text-align:right;font-weight:600;padding-top:8px;">${gbp(monthlyTotal)}</td>
-        <td></td>
-      </tr></tfoot>
+      <tfoot>
+        <tr style="border-top:1px solid var(--border2);">
+          <td style="font-weight:600;padding-top:8px;">Total</td>
+          <td class="mono" style="text-align:right;font-weight:600;padding-top:8px;">${totN}</td>
+          <td class="mono ${monthlyTotal>=0?'pos':'neg'}" style="text-align:right;font-weight:600;padding-top:8px;">${gbp(monthlyTotal)}</td>
+          <td></td>
+        </tr>
+        <tr><td style="color:var(--text3);font-size:12px;padding-left:12px;">Long</td>
+          <td class="mono" style="text-align:right;color:var(--text3);font-size:12px;">${totLongN}</td>
+          <td class="mono ${totLong>=0?'pos':'neg'}" style="text-align:right;font-size:12px;">${gbp(totLong)}</td>
+          <td></td></tr>
+        <tr><td style="color:var(--text3);font-size:12px;padding-left:12px;">Short</td>
+          <td class="mono" style="text-align:right;color:var(--text3);font-size:12px;">${totShortN}</td>
+          <td class="mono ${totShort>=0?'pos':'neg'}" style="text-align:right;font-size:12px;">${gbp(totShort)}</td>
+          <td></td></tr>
+      </tfoot>
     </table>`;
   }
 
@@ -4291,7 +4310,7 @@ function normBroker(broker) { return isHL(broker)?'Hargreaves Lansdown':broker; 
 function $(id){return document.getElementById(id);}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
 function today(){return new Date().toISOString().split('T')[0];}
-function gbp(n){return'£'+(Math.abs(n||0)).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function gbp(n){let v=n||0; if(Math.abs(v)<0.005) v=0;return (v<0?'-':'')+'£'+(Math.abs(v)).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function qty(n){return(n||0).toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:2});}
 function emptyState(title,sub=''){return`<div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="empty-title">${title}</div>${sub?`<div class="empty-sub">${sub}</div>`:''}</div>`;}
 function classBadge(c){return`<span class="badge ${c==='Crypto'?'badge-amber':'badge-blue'}" style="font-size:10px;padding:1px 5px;">${c==='Crypto'?'Crypto':'ETF'}</span>`;}
