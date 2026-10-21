@@ -3451,8 +3451,6 @@ function renderPnL() {
   const mv=Object.values(monthly);
   const monthlyTotal=mv.reduce((s,v)=>s+v.pnl,0);
   const totN   =mv.reduce((s,v)=>s+v.n,0);
-  const totLong=mv.reduce((s,v)=>s+v.long,0),  totLongN =mv.reduce((s,v)=>s+v.longN,0);
-  const totShort=mv.reduce((s,v)=>s+v.short,0), totShortN=mv.reduce((s,v)=>s+v.shortN,0);
   const monthlyEl=$('pnl-monthly-table');
   if(!Object.keys(monthly).length){
     monthlyEl.innerHTML='<div style="padding:18px;text-align:center;font-size:12px;color:var(--text3);">No closed trades in this period</div>';
@@ -3502,14 +3500,6 @@ function renderPnL() {
           <td class="mono ${monthlyTotal>=0?'pos':'neg'}" style="text-align:right;font-weight:600;padding-top:8px;">${gbp(monthlyTotal)}</td>
           <td></td>
         </tr>
-        <tr><td style="color:var(--text3);font-size:12px;padding-left:12px;">Long</td>
-          <td class="mono" style="text-align:right;color:var(--text3);font-size:12px;">${totLongN}</td>
-          <td class="mono ${totLong>=0?'pos':'neg'}" style="text-align:right;font-size:12px;">${gbp(totLong)}</td>
-          <td></td></tr>
-        <tr><td style="color:var(--text3);font-size:12px;padding-left:12px;">Short</td>
-          <td class="mono" style="text-align:right;color:var(--text3);font-size:12px;">${totShortN}</td>
-          <td class="mono ${totShort>=0?'pos':'neg'}" style="text-align:right;font-size:12px;">${gbp(totShort)}</td>
-          <td></td></tr>
       </tfoot>
     </table>`;
   }
