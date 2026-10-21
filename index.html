@@ -2579,6 +2579,25 @@ let _recalcAntes = null;
 function receitaDe(t){ return t.type==='buy' ? (t.valueGBP||0)+(t.pnlGBP||0) : (t.valueGBP||0); }
 function custoDe(t){   return t.type==='buy' ? (t.valueGBP||0) : (t.costBasisGBP||0); }
 
+// Crypto leaves dust. 0.0037 ETH is not zero, and rounding it to two
+// decimals turns a residue into what looks like an empty position.
+function qtyC(n){ return (n||0).toLocaleString('en-GB',{maximumFractionDigits:8}); }
+
+// Asset names carry quotes and apostrophes; they go into onclick attributes.
+function escAttr(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+// Which open position is expanded, and which asset the Trades tab is filtered to.
+let _posAberta = null;
+function togglePos(k){ _posAberta = (_posAberta===k ? null : k); renderPositions(); }
+function filtrarPorAtivo(a){
+  const el=$('trades-search');
+  if(el) el.value=a;
+  if(typeof tradesPage!=='undefined') tradesPage=1;
+  renderTrades();
+  const sec=$('trades-table-wrap');
+  if(sec) sec.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
 function _fyLabel(d){
   const y=+String(d).substring(0,4), m=+String(d).substring(5,7);
   const ini = m>=4 ? y : y-1;
@@ -3274,7 +3293,34 @@ function renderPositions() {
 
     const isReset=data.resetPositions.some(r=>r.asset===p.asset&&r.broker===p.broker);
     const resetBtn=`<button class="btn btn-sm" style="padding:2px 8px;font-size:11px;opacity:0.7;" onclick="resetPosition('${p.asset}','${p.broker}')" title="Ignorar resíduo e resetar posição">Reset</button>`;
-    return `<tr><td><strong>${p.asset}</strong></td><td>${unrealCell}</td><td>${unrealPctCell}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td><td>${livePriceCell}</td><td>${marketValCell}</td><td>${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td>${method}</td><td style="color:var(--text3);font-size:12px;">${p.openDate||p.since||'—'}</td><td>${resetBtn}</td></tr>`;
+    // Crypto is pooled per coin, stocks per coin AND broker, so the list
+    // below must follow the same rule or it will not match the position.
+    const chaveP=`${p.asset}__${p.broker}`;
+    const abertaP=_posAberta===chaveP;
+    const seta=`<span style="display:inline-block;width:10px;color:var(--text3);">${abertaP?'\u25be':'\u25b8'}</span> `;
+    let detalhe='';
+    if(abertaP){
+      const isC=p.class==='Crypto';
+      const suas=data.trades
+        .filter(t=>(t.asset||'').trim()===(p.asset||'').trim() && (isC || t.broker===p.broker))
+        .sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+      const linhas=suas.map(t=>`<tr>
+        <td style="padding:3px 8px;font-size:11px;color:var(--text3);white-space:nowrap;">${t.date}</td>
+        <td style="padding:3px 8px;"><span class="badge ${t.type==='buy'?'badge-green':'badge-red'}" style="font-size:9px;">${t.type==='buy'?'Buy':'Sell'}</span></td>
+        <td style="padding:3px 8px;font-size:11px;color:var(--text3);">${isC?(t.broker||'—'):''}</td>
+        <td class="mono" style="padding:3px 8px;text-align:right;font-size:11px;">${isC?qtyC(t.qty):qty(t.qty)}</td>
+        <td class="mono" style="padding:3px 8px;text-align:right;font-size:11px;color:var(--text3);">${t.price!=null?`${t.currency||''} ${(+t.price).toFixed(t.price<1?6:4)}`:'—'}</td>
+        <td class="mono" style="padding:3px 8px;text-align:right;font-size:11px;">${t.valueGBP?gbp(t.valueGBP):'—'}</td>
+        <td class="mono" style="padding:3px 8px;text-align:right;font-size:11px;">${t.pnlGBP!=null?`<span class="${t.pnlGBP>=0?'pos':'neg'}">${gbp(t.pnlGBP)}</span>`:'<span style="color:var(--text3);">aberta</span>'}</td>
+      </tr>`).join('');
+      detalhe=`<tr style="background:var(--bg3);"><td colspan="14" style="padding:8px 10px 10px 26px;">
+        <div style="font-size:11px;color:var(--text2);margin-bottom:5px;">
+          ${suas.length} ${suas.length===1?'movimento':'movimentos'}${isC?' \u00b7 todas as exchanges, porque a cripto \u00e9 agrupada por moeda':' \u00b7 s\u00f3 '+(p.broker||'')}
+        </div>
+        <table style="width:100%;border-collapse:collapse;"><tbody>${linhas}</tbody></table>
+      </td></tr>`;
+    }
+    return `<tr><td onclick="togglePos('${escAttr(p.asset)}__${escAttr(p.broker)}')" style="cursor:pointer;" title="Ver todos os movimentos deste activo">${seta}<strong>${p.asset}</strong></td><td>${unrealCell}</td><td>${unrealPctCell}</td><td><span class="badge ${p.side==='Short'?'badge-red':'badge-green'}">${p.side}</span></td><td class="mono">${p.class==='Crypto'?qtyC(p.totalQty):qty(p.totalQty)}</td><td class="mono">${gbp(p.avgCostGBP)}</td><td class="mono">${gbp(p.totalCostGBP)}</td><td>${livePriceCell}</td><td>${marketValCell}</td><td>${classBadge(p.class)}</td><td>${brokerTag(p.broker)}</td><td>${method}</td><td style="color:var(--text3);font-size:12px;">${p.openDate||p.since||'—'}</td><td>${resetBtn}</td></tr>`+detalhe;
   }).join('')}</tbody></table>`;
 }
 
@@ -3351,7 +3397,7 @@ function renderTrades() {
     const origPrice=t.price?`${t.currency==='GBP'?'£':t.currency==='USDT'||t.currency==='USD'?'$':'€'}${t.price.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'—';
     const sel=selectedTradeIds.has(t.id)?'selected':'';
     const pairBadge=t.pairId?`<span class="badge badge-purple" style="font-size:10px;" title="${getPairName(t.pairId)}">pair</span>`:'';
-    return `<tr class="selectable ${sel}" onclick="toggleTradeSelect('${t.id}',event)"><td>${pairBadge}</td><td style="color:var(--text3);font-size:12px;">${t.date}</td><td><span class="badge ${isBuy?'badge-green':'badge-red'}">${isBuy?'Buy':'Sell'}</span></td><td><strong>${t.asset}</strong></td><td class="mono">${pnlCell}</td><td>${pnlPctCell}</td><td><span class="badge ${t.side==='Short'?'badge-red':'badge-green'}" style="font-size:10px;">${t.side}</span></td><td class="mono">${qty(t.qty)}</td><td class="mono">${origPrice}</td><td class="mono" style="color:var(--text3);font-size:11px;">${t.fxRate&&t.fxRate!==1?t.fxRate.toFixed(4):'—'}</td><td class="mono" style="color:var(--text3);">${t.price&&t.currency!=='GBP'?`${t.currency==='USDT'||t.currency==='USD'?'$':'€'}${(t.qty*(t.price||0)).toFixed(2)}`:'—'}</td><td class="mono">${t.valueGBP?gbp(t.valueGBP):'—'}</td><td class="mono" style="color:var(--amber);">${t.feesGBP?gbp(t.feesGBP):'—'}</td><td>${classBadge(t.class)}</td><td>${brokerTag(t.broker)}</td><td style="display:flex;gap:4px;"><button class="btn btn-sm" onclick="event.stopPropagation();openEditDatetime('${t.id}')" style="padding:2px 7px;font-size:11px;" title="Editar data/hora">✏️</button><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();delTrade('${t.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`;
+    return `<tr class="selectable ${sel}" onclick="toggleTradeSelect('${t.id}',event)"><td>${pairBadge}</td><td style="color:var(--text3);font-size:12px;">${t.date}</td><td><span class="badge ${isBuy?'badge-green':'badge-red'}">${isBuy?'Buy':'Sell'}</span></td><td onclick="event.stopPropagation();filtrarPorAtivo('${escAttr(t.asset)}')" style="cursor:pointer;" title="Ver só as trades deste activo"><strong>${t.asset}</strong></td><td class="mono">${pnlCell}</td><td>${pnlPctCell}</td><td><span class="badge ${t.side==='Short'?'badge-red':'badge-green'}" style="font-size:10px;">${t.side}</span></td><td class="mono">${qty(t.qty)}</td><td class="mono">${origPrice}</td><td class="mono" style="color:var(--text3);font-size:11px;">${t.fxRate&&t.fxRate!==1?t.fxRate.toFixed(4):'—'}</td><td class="mono" style="color:var(--text3);">${t.price&&t.currency!=='GBP'?`${t.currency==='USDT'||t.currency==='USD'?'$':'€'}${(t.qty*(t.price||0)).toFixed(2)}`:'—'}</td><td class="mono">${t.valueGBP?gbp(t.valueGBP):'—'}</td><td class="mono" style="color:var(--amber);">${t.feesGBP?gbp(t.feesGBP):'—'}</td><td>${classBadge(t.class)}</td><td>${brokerTag(t.broker)}</td><td style="display:flex;gap:4px;"><button class="btn btn-sm" onclick="event.stopPropagation();openEditDatetime('${t.id}')" style="padding:2px 7px;font-size:11px;" title="Editar data/hora">✏️</button><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();delTrade('${t.id}')" style="padding:2px 7px;font-size:11px;">✕</button></td></tr>`;
   }).join('')}</tbody></table>${paginationHTML}`;
 }
 
