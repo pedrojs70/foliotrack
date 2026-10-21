@@ -2339,8 +2339,9 @@ function cmpTrades(a, b) {
   }
   if(a.type==='buy'&&b.type==='sell') return -1;
   if(a.type==='sell'&&b.type==='buy') return 1;
-  if((a.id||'')<(b.id||'')) return -1;
-  if((a.id||'')>(b.id||'')) return 1;
+  // Still tied: leave them exactly as the broker's file listed them.
+  // Trade ids end in random characters, so ordering by id would shuffle
+  // two sells of the same day at random — which is how a short came apart.
   return 0;
 }
 
@@ -2557,6 +2558,10 @@ function confirmMatch(sellId, val) {
 // ============================================================
 let _recalcAntes = null;
 
+// gbp() prints the absolute value, which is fine where a colour carries the
+// sign. In this window a loss must read as a loss, so this one keeps it.
+function gbpS(n){ const v=n||0; return (v<0?'-':'')+gbp(v); }
+
 function _fyLabel(d){
   const y=+String(d).substring(0,4), m=+String(d).substring(5,7);
   const ini = m>=4 ? y : y-1;
@@ -2613,8 +2618,8 @@ function recalcularTudo(){
     <td style="padding:4px 6px;color:var(--text2);">${x.t.date}</td>
     <td style="padding:4px 6px;"><strong>${x.t.asset}</strong></td>
     <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${qty(x.t.qty)}</td>
-    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${x.a==null?'—':gbp(x.a)}</td>
-    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${cor};">${x.d==null?'—':gbp(x.d)}</td></tr>`;
+    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${x.a==null?'—':gbpS(x.a)}</td>
+    <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${cor};">${x.d==null?'—':gbpS(x.d)}</td></tr>`;
 
   const tabela=(titulo,arr,cor)=>{
     if(!arr.length) return '';
@@ -2633,8 +2638,8 @@ function recalcularTudo(){
     html=`<div class="notice notice-info"><div class="notice-text">Nada muda. Os cálculos actuais já estão de acordo com o motor.</div></div>`;
   } else {
     html=`<table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:4px;">
-      <tr><td style="padding:5px 6px;">Vendas que passam a ter lucro registado</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:var(--green);"><strong>${ganharam.length}</strong> · ${gbp(ganharam.reduce((s,x)=>s+x.d,0))}</td></tr>
-      <tr><td style="padding:5px 6px;">Vendas cujo lucro muda de valor</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);">${mudaram.length}${mudaram.length?' · '+gbp(som(mudaram))+' de diferença':''}</td></tr>
+      <tr><td style="padding:5px 6px;">Vendas que passam a ter lucro registado</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:var(--green);"><strong>${ganharam.length}</strong> · ${gbpS(ganharam.reduce((s,x)=>s+x.d,0))}</td></tr>
+      <tr><td style="padding:5px 6px;">Vendas cujo lucro muda de valor</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);">${mudaram.length}${mudaram.length?' · '+gbpS(som(mudaram))+' de diferença':''}</td></tr>
       <tr><td style="padding:5px 6px;">Vendas que ficam sem lucro</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:${perderam.length?'var(--red)':'var(--text3)'};">${perderam.length}</td></tr>
       <tr><td style="padding:5px 6px;">Lucros retirados de linhas de compra</td><td style="padding:5px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${limpas.length}</td></tr>
     </table>
@@ -2643,9 +2648,9 @@ function recalcularTudo(){
       <thead><tr style="color:var(--text3);"><th style="text-align:left;padding:3px 6px;">Ano</th><th style="text-align:right;padding:3px 6px;">Antes</th><th style="text-align:right;padding:3px 6px;">Depois</th><th style="text-align:right;padding:3px 6px;">Diferença</th></tr></thead>
       <tbody>${anos.map(a=>{const x=fyAntes[a]||0,y=fyDepois[a]||0;const dif=y-x;
         return `<tr><td style="padding:4px 6px;">${a}</td>
-          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${gbp(x)}</td>
-          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${gbp(y)}</td>
-          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${Math.abs(dif)<0.005?'var(--text3)':dif>0?'var(--green)':'var(--red)'};">${Math.abs(dif)<0.005?'—':gbp(dif)}</td></tr>`;}).join('')}</tbody></table>`;
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--text3);">${gbpS(x)}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${gbpS(y)}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${Math.abs(dif)<0.005?'var(--text3)':dif>0?'var(--green)':'var(--red)'};">${Math.abs(dif)<0.005?'—':gbpS(dif)}</td></tr>`;}).join('')}</tbody></table>`;
     html+=tabela('Vendas que passam a ter lucro', ganharam, 'var(--green)');
     html+=tabela('Vendas cujo lucro muda', mudaram, 'var(--text)');
     html+=tabela('Vendas que ficam sem lucro', perderam, 'var(--red)');
