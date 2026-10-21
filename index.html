@@ -4759,6 +4759,8 @@ async function refreshLivePrices() {
   };
 
   const ibkrYahooMap = {
+    // Fastned (Amsterdam), not Fastenal (NASDAQ) — both answer to FAST.
+    'FAST':  {ticker:'FAST.AS',   currency:'EUR'},
     'ACS':   {ticker:'ACS.MC',    currency:'EUR'},
     'GALP':  {ticker:'GALP.LS',   currency:'EUR'},
     'ALFEN': {ticker:'ALFEN.AS',  currency:'EUR'},
