@@ -563,6 +563,7 @@ tbody tr:hover{background:rgba(255,255,255,0.02);}
             <option value="Capital.com">Capital.com</option>
           </select>
           <input type="text" id="trades-search" placeholder="Search asset, broker, tag..." oninput="tradesPage=1;renderTrades()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;width:240px;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+          <button class="btn btn-secondary btn-sm" id="btn-limpar-filtro" style="display:none;white-space:nowrap;" onclick="limparFiltroAtivo()" title="Voltar a mostrar todas as trades">&#10005; Ver todas</button>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
             <button class="btn btn-secondary" id="btn-undo" onclick="undoAction()" disabled title="Undo (Ctrl+Z)" style="padding:4px 8px;font-size:11px;">↩</button>
@@ -2589,6 +2590,13 @@ function escAttr(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/
 // Which open position is expanded, and which asset the Trades tab is filtered to.
 let _posAberta = null;
 function togglePos(k){ _posAberta = (_posAberta===k ? null : k); renderPositions(); }
+function limparFiltroAtivo(){
+  const el=$('trades-search');
+  if(el) el.value='';
+  if(typeof tradesPage!=='undefined') tradesPage=1;
+  renderTrades();
+}
+
 function filtrarPorAtivo(a){
   const el=$('trades-search');
   if(el) el.value=a;
@@ -3358,6 +3366,8 @@ function renderTrades() {
   // Search filter
   const searchEl=$('trades-search');
   const q=(searchEl?searchEl.value:'').toLowerCase().trim();
+  const btnLimpar=$('btn-limpar-filtro');
+  if(btnLimpar) btnLimpar.style.display = q ? '' : 'none';
   if(q){
     trades=trades.filter(t=>
       (t.asset||'').toLowerCase().includes(q)||
